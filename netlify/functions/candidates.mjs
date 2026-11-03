@@ -10,7 +10,7 @@ export default async (req) => {
   try {
     if (req.method === "GET") {
       const status = new URL(req.url).searchParams.get("status");
-      const filter = STATUSES.includes(status) ? `&status=eq.${status}` : "";
+      const filter = status === "not_vendor" ? "&status=neq.vendor" : STATUSES.includes(status) ? `&status=eq.${status}` : "";
       const rows = await rest(`candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,authors(full_name)&order=found_at.desc&limit=200${filter}`);
       return json(200, { items: rows || [] });
     }
