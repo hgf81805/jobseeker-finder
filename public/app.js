@@ -16,7 +16,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtTime = ts => new Date(ts * 1000).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
-const STATUS_LABEL = { new: "未対応", contacted: "声かけ済", replied: "返信あり", meeting: "面談", won: "成約", skip: "対象外", vendor: "業者" };
+const STATUS_LABEL = { new: "候補", contacted: "声かけ済", replied: "返信あり", meeting: "面談", won: "成約", skip: "対象外", vendor: "業者" };
 let hasDb = false;
 
 class ApiError extends Error { constructor(status, body) { super(body.message || "エラー"); this.status = status; this.code = body.error; } }
@@ -218,7 +218,6 @@ function render(shown, excluded, stats) {
         <span>${verified ? `<span class="pill">表示確認済</span> ` : ""}<a href="${esc(post.url)}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
-        <button type="button" class="act" data-set="contacted" aria-pressed="false">声かけ済</button>
         <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
         <button type="button" class="act" data-set="vendor" aria-pressed="false">業者</button>
       </div>` : ""}
@@ -267,20 +266,23 @@ async function setStatus(code, status) {
   return api("/api/candidates", { code, status }, "PATCH");
 }
 
-// 検索結果のカードのボタン
-$("results").addEventListener("click", async ev => {
+// 「対象外」「業者」ボタン（検索結果と候補一覧で共通）。押されているボタンをもう一度押すと取り消す
+async function onMarkClick(ev) {
   const btn = ev.target.closest(".act");
   if (!btn) return;
   const box = btn.closest(".actions");
+  const next = btn.getAttribute("aria-pressed") === "true" ? "new" : btn.dataset.set;
   btn.disabled = true;
   try {
-    await setStatus(box.dataset.code, btn.dataset.set);
-    box.querySelectorAll(".act").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
-    btn.closest(".card").classList.toggle("done", btn.dataset.set !== "contacted");
+    await setStatus(box.dataset.code, next);
+    box.querySelectorAll(".act").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === next)));
+    btn.closest(".card").classList.toggle("done", next !== "new");
   } catch (e) {
     alertInline(box, "保存できませんでした");
   } finally { btn.disabled = false; }
-});
+}
+$("results").addEventListener("click", onMarkClick);
+$("list").addEventListener("click", onMarkClick);
 function alertInline(el, text) {
   const s = document.createElement("span");
   s.className = "saved"; s.style.color = "var(--bad)"; s.textContent = text;
@@ -317,15 +319,17 @@ async function loadList() {
         </div>
         <p>${esc(c.caption)}</p>
         <div class="cand-meta">
-          <label>進み具合 <select class="cand-status" aria-label="進み具合">${Object.entries(STATUS_LABEL).map(([k, v]) => `<option value="${k}"${k === c.status ? " selected" : ""}>${v}</option>`).join("")}</select></label>
+          <span class="actions" data-code="${esc(c.code)}">
+            <button type="button" class="act" data-set="skip" aria-pressed="${c.status === "skip"}">対象外</button>
+            <button type="button" class="act" data-set="vendor" aria-pressed="${c.status === "vendor"}">業者</button>
+          </span>
           <span>見つけた日 ${fmtTime(Date.parse(c.found_at) / 1000)}</span>
-          ${c.contacted_at ? `<span>声かけ ${fmtTime(Date.parse(c.contacted_at) / 1000)}</span>` : ""}
           <a href="${esc(c.url)}" target="_blank" rel="noopener">Threadsで開く</a>
           <span class="saved" hidden>保存しました</span>
         </div>
         <textarea class="cand-note" aria-label="メモ" placeholder="メモ（やり取りの内容など）">${esc(c.note || "")}</textarea>
       </article>`).join("")
-      : `<div class="empty">この条件の候補はまだありません。検索すると、表示した投稿がここに「未対応」として入ります。</div>`;
+      : `<div class="empty">この条件の候補はまだありません。検索すると、表示した投稿がここに入ります。</div>`;
   } catch (e) {
     st.className = "status bad"; st.textContent = e.message || "読み込めませんでした。"; st.hidden = false;
   }
@@ -341,10 +345,7 @@ async function saveCandidate(card, patch) {
 $("list").addEventListener("change", ev => {
   const card = ev.target.closest(".card");
   if (!card) return;
-  if (ev.target.classList.contains("cand-status")) {
-    card.classList.toggle("done", ["skip", "vendor"].includes(ev.target.value));
-    saveCandidate(card, { status: ev.target.value });
-  } else if (ev.target.classList.contains("cand-note")) {
+  if (ev.target.classList.contains("cand-note")) {
     saveCandidate(card, { note: ev.target.value });
   }
 });
