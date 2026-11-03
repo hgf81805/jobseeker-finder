@@ -226,9 +226,28 @@ function render(shown, excluded, stats) {
     : `<div class="empty">条件に合う投稿が見つかりませんでした。期間を延ばすか、コメント数の上限を上げるか、キーワードを足してください。</div>`;
 
   $("exSummary").textContent = `除外した投稿（${excluded.length}件）`;
-  $("exList").innerHTML = excluded.map(x => `
-    <div class="ex-row"><span class="ex-tag ${x.tag}">${esc(x.label)}</span>
-    <span class="t" title="${esc(x.it.post.caption)}"><b>${x.it.user ? "@" + esc(x.it.user.username) : "—"}</b>${esc(x.why)} ・ ${esc((x.it.post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span></div>`).join("");
+  // 1行に縮めて表示し、押すと本文の全文と Threads へのリンクを開く
+  $("exList").innerHTML = excluded.map(x => {
+    const post = x.it.post;
+    const user = x.it.user;
+    const url = post.url || `https://www.threads.com/post/${encodeURIComponent(post.code)}`;
+    return `
+    <details class="ex-row">
+      <summary><span class="ex-tag ${x.tag}">${esc(x.label)}</span>
+        <span class="t"><b>${user ? "@" + esc(user.username) : "—"}</b>${esc(x.why)} ・ ${esc((post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span></summary>
+      <div class="ex-detail">
+        <p>${esc(post.caption)}</p>
+        <div class="ex-foot">
+          <span class="metrics">
+            <span>コメント <strong>${post.reply_count ?? 0}</strong></span>
+            <span>いいね <strong>${post.like_count ?? 0}</strong></span>
+            ${post.post_timestamp ? `<span>${fmtTime(post.post_timestamp)} 投稿</span>` : ""}
+          </span>
+          <a href="${esc(url)}" target="_blank" rel="noopener">Threadsで開く</a>
+        </div>
+      </div>
+    </details>`;
+  }).join("");
   $("excluded").hidden = excluded.length === 0;
 }
 
