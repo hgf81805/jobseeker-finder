@@ -34,7 +34,9 @@ export default async (req) => {
     }
     return json(405, { error: "method_not_allowed" });
   } catch (e) {
-    return json(502, { error: "db_error", message: "データベースの読み書きに失敗しました。" });
+    const hint = e.status === 401 || e.status === 403 ? "（Supabase のキーが正しくない可能性があります。service_role／secret キーか確認してください）"
+      : e.status === 404 ? "（SUPABASE_URL かテーブルの作成を確認してください）" : "";
+    return json(502, { error: "db_error", message: `データベースの読み書きに失敗しました。${hint} 詳細：${e.detail || e.message}` });
   }
 };
 

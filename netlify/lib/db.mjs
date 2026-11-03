@@ -9,13 +9,19 @@ export const dailyLimit = () => {
 };
 
 export async function rest(path, { method = "GET", body, prefer } = {}) {
-  const headers = { apikey: key(), Authorization: `Bearer ${key()}`, "Content-Type": "application/json" };
+  // 新しい形式の secret キー（sb_secret_...）は apikey ヘッダーだけで渡す。旧形式（JWT）は Authorization にも入れる
+  const headers = { apikey: key(), "Content-Type": "application/json" };
+  if (key().startsWith("eyJ")) headers.Authorization = `Bearer ${key()}`;
   if (prefer) headers.Prefer = prefer;
   const r = await fetch(`${baseUrl()}/rest/v1/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   if (!r.ok) {
-    const e = new Error(`db ${r.status}: ${text.slice(0, 200)}`);
+    let detail = "";
+    try { const b = JSON.parse(text); detail = [b.code, b.message || b.msg || b.error].filter(Boolean).join(" "); } catch (e) { detail = text.slice(0, 120); }
+    const e = new Error(`db ${r.status}: ${detail}`);
     e.code = "db_error";
+    e.status = r.status;
+    e.detail = `${r.status} ${detail}`.slice(0, 200);
     throw e;
   }
   return text ? JSON.parse(text) : null;
