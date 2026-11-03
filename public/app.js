@@ -72,7 +72,7 @@ function readForm() {
   const maxReplies = clampInt($("maxReplies").value, 0, 999, 0); $("maxReplies").value = maxReplies;
   const likesRaw = $("maxLikes").value.trim();
   const maxLikes = likesRaw === "" ? null : clampInt(likesRaw, 0, 1e7, null);
-  const want = clampInt($("want").value, 1, 30, 10); $("want").value = want;
+  const want = clampInt($("want").value, 1, 10, 10); $("want").value = want;
   return {
     keywords: parseKeywords($("q").value), days, maxReplies, maxLikes, want,
     noVendor: $("noVendor").checked, noDeleted: $("noDeleted").checked, threadOnly: $("threadOnly").checked,
