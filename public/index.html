@@ -37,7 +37,7 @@
     <button type="button" class="btn-ghost" id="logout">ログアウト</button>
   </header>
 
-  <div class="status warn" id="keyWarn" hidden>サーバーに throk の APIキーがまだ設定されていません。Netlify の Site configuration → Environment variables に <b>THROK_API_KEY</b> を追加し、再デプロイしてください。</div>
+  <div class="status warn" id="keyWarn" hidden>検索用の APIキーがサーバーにまだ設定されていません。Netlify の環境変数を設定し、再デプロイしてください（設定する名前は README に記載）。</div>
 
   <form class="search" id="form" novalidate>
     <div class="searchbar">
@@ -88,7 +88,7 @@
     </details>
 
     <div class="cost">
-      <span>throk のクレジットを使います（検索 1件2、存在確認 1件3）</span>
+      <span>検索ごとにクレジットを使います（検索 1件2、存在確認 1件3）</span>
       <span>今回の見積もり：最大 <b id="estimate">—</b> クレジット</span>
     </div>
   </form>
