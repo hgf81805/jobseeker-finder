@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>求職者ポスト検索</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<section class="login" id="login" hidden>
+  <form id="loginForm" novalidate>
+    <h1>求職者ポスト検索</h1>
+    <p class="lead">ログインしてください。</p>
+    <div class="field">
+      <label for="loginEmail">メールアドレス</label>
+      <input id="loginEmail" type="email" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="loginPass">パスワード</label>
+      <input id="loginPass" type="password" autocomplete="current-password" required>
+    </div>
+    <label class="keep"><input type="checkbox" id="loginKeep" checked> ログインしたままにする（30日）</label>
+    <p class="err" id="loginErr" role="alert"></p>
+    <button class="btn-primary" id="loginBtn" type="submit">ログイン</button>
+  </form>
+</section>
+
+<main class="wrap" id="app" hidden>
+  <header class="topbar">
+    <div>
+      <h1>求職者ポスト検索</h1>
+      <p class="lead">Threads の日本語投稿から、転職を考えている本人のつぶやきを探します。業者の書き込みと削除済みの投稿は自動で外します。</p>
+    </div>
+    <button type="button" class="btn-ghost" id="logout">ログアウト</button>
+  </header>
+
+  <div class="status warn" id="keyWarn" hidden>サーバーに throk の APIキーがまだ設定されていません。Netlify の Site configuration → Environment variables に <b>THROK_API_KEY</b> を追加し、再デプロイしてください。</div>
+
+  <form class="search" id="form" novalidate>
+    <div class="searchbar">
+      <input id="q" type="search" aria-label="検索キーワード" placeholder="例：転職活動中 転職先を探して 転職したい" autocomplete="off">
+      <button class="btn-primary" id="go" type="submit">検索</button>
+    </div>
+    <div class="presets" aria-label="キーワードの候補">
+      <span class="lbl">追加：</span>
+      <button type="button" class="preset">転職活動中</button>
+      <button type="button" class="preset">転職先を探して</button>
+      <button type="button" class="preset">転職先が見つから</button>
+      <button type="button" class="preset">転職したい</button>
+      <button type="button" class="preset">転職先決まら</button>
+      <button type="button" class="preset">次の職場を探して</button>
+      <button type="button" class="preset">仕事辞めたい</button>
+      <button type="button" class="preset">退職しました</button>
+    </div>
+
+    <div class="filters">
+      <div class="field">
+        <label for="days">期間（直近）</label>
+        <div class="num"><input id="days" type="number" min="1" max="7" step="1" value="5" inputmode="numeric"><span>日（最大7）</span></div>
+      </div>
+      <div class="field">
+        <label for="maxReplies">コメント数</label>
+        <div class="num"><input id="maxReplies" type="number" min="0" max="999" step="1" value="0" inputmode="numeric"><span>件以下</span></div>
+      </div>
+      <div class="field">
+        <label for="maxLikes">いいね数</label>
+        <div class="num"><input id="maxLikes" type="number" min="0" step="1" placeholder="上限なし" inputmode="numeric"><span>件以下</span></div>
+      </div>
+      <div class="field">
+        <label for="want">表示する件数</label>
+        <div class="num"><input id="want" type="number" min="1" max="30" step="1" value="10" inputmode="numeric"><span>件</span></div>
+      </div>
+    </div>
+
+    <div class="toggles">
+      <label><input type="checkbox" id="noVendor" checked> 業者の書き込みを除外</label>
+      <label><input type="checkbox" id="noDeleted" checked> 削除済みの投稿を除外（表示前に存在確認）</label>
+      <label><input type="checkbox" id="threadOnly" checked> 返信は除き、元投稿だけ</label>
+    </div>
+
+    <details class="adv">
+      <summary>業者と判定する言葉を編集</summary>
+      <textarea id="vendorWords" aria-label="業者判定に使う言葉"></textarea>
+      <p class="hint">本文か表示名にこの言葉を含む投稿を業者として外します。スペースか改行で区切ります。</p>
+    </details>
+
+    <div class="cost">
+      <span>throk のクレジットを使います（検索 1件2、存在確認 1件3）</span>
+      <span>今回の見積もり：最大 <b id="estimate">—</b> クレジット</span>
+    </div>
+  </form>
+
+  <div class="status" id="status" hidden></div>
+
+  <div class="summary" id="summary" hidden></div>
+  <section class="results" id="results" aria-live="polite">
+    <div class="empty">キーワードを入れて「検索」を押すと、ここに求職者の投稿が並びます。</div>
+  </section>
+  <details class="excluded" id="excluded" hidden>
+    <summary id="exSummary">除外した投稿</summary>
+    <div class="ex-list" id="exList"></div>
+  </details>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
