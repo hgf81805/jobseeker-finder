@@ -1,6 +1,7 @@
 // Supabase の REST（PostgREST）を service_role キーで呼ぶ。キーはサーバーの環境変数にだけ置く
-const baseUrl = () => (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-const key = () => process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+// 貼り付け時に混ざりやすい空白・引用符・「Bearer 」や末尾の /rest/v1 を取り除く
+const baseUrl = () => (process.env.SUPABASE_URL || "").trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
+const key = () => (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim().replace(/^["']|["']$/g, "").replace(/^Bearer\s+/i, "");
 
 export const dbEnabled = () => !!(baseUrl() && key());
 export const dailyLimit = () => {
