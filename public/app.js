@@ -1,6 +1,8 @@
-const PAGE_SIZE = 50;
+// クレジットの上限：検索は1件1（投稿者情報なし）、存在確認は1件3
+const PAGE_SIZE = 30;
 const MAX_PAGES = 2;
-const LIVE_BATCH = 20;
+const LIVE_BATCH = 10;
+const MAX_LIVE = 20;
 const DEFAULT_VENDOR_WORDS = [
   "募集中", "募集して", "採用中", "採用情報", "求人情報", "求人中", "ご応募", "応募はこちら", "応募から",
   "一緒に働きませんか", "働きませんか", "お祝い金", "未経験歓迎", "大歓迎",
@@ -40,13 +42,21 @@ $("loginForm").addEventListener("submit", async ev => {
     await api("/api/login", { email: $("loginEmail").value, password: $("loginPass").value, keep: $("loginKeep").checked });
     $("loginPass").value = "";
     await checkSession();
+    refreshBalance();
   } catch (e) {
     $("loginErr").textContent = e.status === 401 ? "メールアドレスかパスワードが違います。" : "ログインできませんでした。時間をおいてもう一度お試しください。";
     $("loginPass").value = "";
   } finally { $("loginBtn").disabled = false; }
 });
 $("logout").addEventListener("click", async () => { try { await api("/api/logout", {}); } catch (e) {} showApp(false); });
-checkSession();
+checkSession().then(() => { if (!$("app").hidden) refreshBalance(); });
+
+async function refreshBalance() {
+  try {
+    const b = await api("/api/balance");
+    $("balance").textContent = typeof b.credits === "number" ? b.credits.toLocaleString() : "—";
+  } catch (e) { $("balance").textContent = "—"; }
+}
 
 // 検索フォーム
 $("vendorWords").value = DEFAULT_VENDOR_WORDS.join(" ");
@@ -75,28 +85,29 @@ function readForm() {
   const want = clampInt($("want").value, 1, 10, 10); $("want").value = want;
   return {
     keywords: parseKeywords($("q").value), days, maxReplies, maxLikes, want,
-    noVendor: $("noVendor").checked, noDeleted: $("noDeleted").checked, threadOnly: $("threadOnly").checked,
+    noVendor: $("noVendor").checked, threadOnly: $("threadOnly").checked,
     vendorWords: parseKeywords($("vendorWords").value)
   };
 }
 function updateEstimate() {
-  const f = readForm();
-  const search = PAGE_SIZE * MAX_PAGES * 2;
-  const live = f.noDeleted ? Math.min(f.want + 10, PAGE_SIZE * MAX_PAGES) * 3 : 0;
-  $("estimate").textContent = (search + live).toLocaleString();
+  $("estimate").textContent = (PAGE_SIZE * MAX_PAGES + MAX_LIVE * 3).toLocaleString();
 }
-["days", "maxReplies", "maxLikes", "want", "noDeleted"].forEach(id => $(id).addEventListener("change", updateEstimate));
+["days", "maxReplies", "maxLikes", "want"].forEach(id => $(id).addEventListener("change", updateEstimate));
 updateEstimate();
 
-function vendorReason(item, words) {
-  const caption = item.post.caption || "";
-  const name = (item.user.full_name || "") + " " + (item.user.username || "");
-  const hitCaption = words.find(w => caption.includes(w));
-  if (hitCaption) return `本文に「${hitCaption}」`;
-  const hitName = NAME_MARKERS.find(w => name.includes(w));
-  if (hitName) return `表示名に「${hitName}」（発信・業者アカウント）`;
+// 本文での判定は検索直後に、表示名での判定は存在確認で投稿者が分かってから行う
+function captionVendorReason(post, words) {
+  const caption = post.caption || "";
+  const hit = words.find(w => caption.includes(w));
+  if (hit) return `本文に「${hit}」`;
   if (/[①②③④⑤⑥]/.test(caption) && /(聞きたい|どれ|教えて)/.test(caption)) return "アンケート型の集客投稿";
   return null;
+}
+function nameVendorReason(user) {
+  if (!user) return null;
+  const name = (user.full_name || "") + " " + (user.username || "");
+  const hit = NAME_MARKERS.find(w => name.includes(w));
+  return hit ? `表示名に「${hit}」（発信・業者アカウント）` : null;
 }
 
 function showStatus(kind, html) { const el = $("status"); el.className = "status " + kind; el.innerHTML = html; el.hidden = false; }
@@ -133,35 +144,37 @@ async function runSearch(f) {
         const rc = it.post.reply_count || 0;
         if (rc > f.maxReplies) { excluded.push({ it, tag: "replies", label: "コメント数", why: `コメント${rc}件` }); overReplies = true; continue; }
         if (f.maxLikes != null && (it.post.like_count || 0) > f.maxLikes) { excluded.push({ it, tag: "replies", label: "いいね数", why: `いいね${it.post.like_count}件` }); continue; }
-        const vr = f.noVendor ? vendorReason(it, f.vendorWords) : null;
+        const vr = f.noVendor ? captionVendorReason(it.post, f.vendorWords) : null;
         if (vr) { excluded.push({ it, tag: "vendor", label: "業者", why: vr }); continue; }
         passed.push(it);
       }
       // コメントの少ない順なので、上限を超えたら以降のページも超える
-      if (overReplies || items.length < PAGE_SIZE || passed.length >= f.want + 10) break;
+      if (overReplies || items.length < PAGE_SIZE || passed.length >= MAX_LIVE) break;
     }
 
-    let shown = [];
-    if (f.noDeleted) {
-      for (let i = 0; i < passed.length && shown.length < f.want; i += LIVE_BATCH) {
-        const batch = passed.slice(i, i + LIVE_BATCH);
-        prog(`削除されていないか確認中… ${Math.min(i + LIVE_BATCH, passed.length)}/${passed.length}`);
-        const p = await api("/api/live", { codes: batch.map(b => b.post.code) });
-        credits += (p.metadata && p.metadata.credits_consumed) || 0;
-        const byCode = new Map((p.content || []).map(r => [r.post_code, r]));
-        for (const it of batch) {
-          const r = byCode.get(it.post.code);
-          if (!r || !r.success) { excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" }); continue; }
-          const live = { ...it.post, ...r.post, url: r.post.url || it.post.url };
-          if ((live.reply_count || 0) > f.maxReplies) { excluded.push({ it, tag: "replies", label: "コメント数", why: `確認時点でコメント${live.reply_count}件` }); continue; }
-          if (shown.length < f.want) shown.push({ post: live, user: it.user, verified: true });
-        }
+    // 存在確認：必要な件数がそろった時点で止める（最大 MAX_LIVE 件）
+    const shown = [];
+    const toCheck = passed.slice(0, MAX_LIVE);
+    for (let i = 0; i < toCheck.length && shown.length < f.want; i += LIVE_BATCH) {
+      const batch = toCheck.slice(i, i + LIVE_BATCH);
+      prog(`削除されていないか確認中… ${Math.min(i + LIVE_BATCH, toCheck.length)}/${toCheck.length}`);
+      const p = await api("/api/live", { codes: batch.map(b => b.post.code) });
+      credits += (p.metadata && p.metadata.credits_consumed) || 0;
+      const byCode = new Map((p.content || []).map(r => [r.post_code, r]));
+      for (const it of batch) {
+        const r = byCode.get(it.post.code);
+        if (!r || !r.success) { excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" }); continue; }
+        const live = { ...it.post, ...r.post, url: r.post.url || it.post.url };
+        const withUser = { post: live, user: r.user || it.user };
+        if ((live.reply_count || 0) > f.maxReplies) { excluded.push({ it: withUser, tag: "replies", label: "コメント数", why: `確認時点でコメント${live.reply_count}件` }); continue; }
+        const nr = f.noVendor ? nameVendorReason(withUser.user) : null;
+        if (nr) { excluded.push({ it: withUser, tag: "vendor", label: "業者", why: nr }); continue; }
+        if (shown.length < f.want) shown.push({ ...withUser, verified: true });
       }
-    } else {
-      shown = passed.slice(0, f.want);
     }
     hideStatus();
     render(shown, excluded, { credits, fetched, total });
+    refreshBalance();
   } catch (e) {
     if (e.status === 401) { showApp(false); return; }
     showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
@@ -181,7 +194,7 @@ function render(shown, excluded, stats) {
   $("results").innerHTML = shown.length ? shown.map(({ post, user, verified }) => `
     <article class="card">
       <div class="head">
-        <span class="who">@${esc(user.username)}${user.full_name ? `<small>${esc(user.full_name)}</small>` : ""}</span>
+        <span class="who">@${esc(user && user.username)}${user && user.full_name ? `<small>${esc(user.full_name)}</small>` : ""}</span>
         <span class="when">${fmtTime(post.post_timestamp)} 投稿</span>
       </div>
       <p>${esc(post.caption)}</p>
@@ -199,6 +212,6 @@ function render(shown, excluded, stats) {
   $("exSummary").textContent = `除外した投稿（${excluded.length}件）`;
   $("exList").innerHTML = excluded.map(x => `
     <div class="ex-row"><span class="ex-tag ${x.tag}">${esc(x.label)}</span>
-    <span class="t" title="${esc(x.it.post.caption)}"><b>@${esc(x.it.user.username)}</b>${esc(x.why)} ・ ${esc((x.it.post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span></div>`).join("");
+    <span class="t" title="${esc(x.it.post.caption)}"><b>${x.it.user ? "@" + esc(x.it.user.username) : "—"}</b>${esc(x.why)} ・ ${esc((x.it.post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span></div>`).join("");
   $("excluded").hidden = excluded.length === 0;
 }

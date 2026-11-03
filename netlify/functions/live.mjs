@@ -6,7 +6,7 @@ export default async (req) => {
   if (!isLoggedIn(req)) return unauthorized();
   const body = await readJson(req);
   const codes = (Array.isArray(body.codes) ? body.codes : [])
-    .map(c => String(c).trim()).filter(c => /^[A-Za-z0-9_-]{5,20}$/.test(c)).slice(0, 20);
+    .map(c => String(c).trim()).filter(c => /^[A-Za-z0-9_-]{5,20}$/.test(c)).slice(0, 10);
   if (!codes.length) return json(400, { error: "bad_request", message: "投稿コードがありません。" });
   try {
     return json(200, await throkGet("/live/posts", { codes }));

@@ -77,7 +77,6 @@
 
     <div class="toggles">
       <label><input type="checkbox" id="noVendor" checked> 業者の書き込みを除外</label>
-      <label><input type="checkbox" id="noDeleted" checked> 削除済みの投稿を除外（表示前に存在確認）</label>
       <label><input type="checkbox" id="threadOnly" checked> 返信は除き、元投稿だけ</label>
     </div>
 
@@ -88,8 +87,8 @@
     </details>
 
     <div class="cost">
-      <span>検索ごとにクレジットを使います（検索 1件2、存在確認 1件3）</span>
-      <span>今回の見積もり：最大 <b id="estimate">—</b> クレジット</span>
+      <span>削除済みの投稿は表示前に確認して外します。1回の検索で使うクレジットは最大 <b id="estimate">—</b></span>
+      <span>残りクレジット：<b id="balance">—</b></span>
     </div>
   </form>
 

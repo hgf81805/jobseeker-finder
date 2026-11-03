@@ -20,9 +20,9 @@ export default async (req) => {
       post_type: body.threadOnly === false ? "all" : "thread",
       max_age_hours: clamp(body.days, 1, 7, 5) * 24,
       sort: "replies:asc",
-      size: clamp(body.size, 1, 100, 50),
-      page: clamp(body.page, 1, 20, 1),
-      include_details: true,
+      size: clamp(body.size, 1, 30, 30),
+      page: clamp(body.page, 1, 2, 1),
+      include_details: false,
     }));
   } catch (e) {
     return throkError(e);
