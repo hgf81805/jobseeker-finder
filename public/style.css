@@ -116,6 +116,21 @@ details.adv .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
 .login .err { color: var(--bad); font-size: 13px; min-height: 1.4em; margin: 0; }
 .login .keep { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
 .login .keep input { accent-color: var(--accent); }
+.tabs, .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab, .chip-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 16px; font-size: 14px; }
+.chip-btn { padding: 3px 12px; font-size: 13px; }
+.tab[aria-pressed="true"], .chip-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.view { display: grid; gap: 20px; }
+.view[hidden] { display: none; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.act { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 3px 10px; font-size: 12px; }
+.act:hover { border-color: var(--accent); color: var(--accent); }
+.act[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.card.done { opacity: .6; }
+.cand-meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
+.cand-meta select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.cand-note { width: 100%; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); min-height: 2.6em; resize: vertical; }
+.saved { font-size: 12px; color: var(--ok); }
 .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 @media (max-width: 720px) {
   .filters { grid-template-columns: repeat(2, 1fr); }
