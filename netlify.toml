@@ -1,6 +1,8 @@
 [build]
   publish = "public"
   functions = "netlify/functions"
+  # OGP は絶対URLが必要なので、ビルド時に Netlify のサイトURL（URL）を埋め込む
+  command = "sed -i \"s|__SITE_URL__|${URL}|g\" public/index.html"
 
 [functions]
   node_bundler = "esbuild"
