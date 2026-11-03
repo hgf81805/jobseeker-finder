@@ -42,21 +42,13 @@ $("loginForm").addEventListener("submit", async ev => {
     await api("/api/login", { email: $("loginEmail").value, password: $("loginPass").value, keep: $("loginKeep").checked });
     $("loginPass").value = "";
     await checkSession();
-    refreshBalance();
   } catch (e) {
     $("loginErr").textContent = e.status === 401 ? "メールアドレスかパスワードが違います。" : "ログインできませんでした。時間をおいてもう一度お試しください。";
     $("loginPass").value = "";
   } finally { $("loginBtn").disabled = false; }
 });
 $("logout").addEventListener("click", async () => { try { await api("/api/logout", {}); } catch (e) {} showApp(false); });
-checkSession().then(() => { if (!$("app").hidden) refreshBalance(); });
-
-async function refreshBalance() {
-  try {
-    const b = await api("/api/balance");
-    $("balance").textContent = typeof b.credits === "number" ? b.credits.toLocaleString() : "—";
-  } catch (e) { $("balance").textContent = "—"; }
-}
+checkSession();
 
 // 検索フォーム
 $("vendorWords").value = DEFAULT_VENDOR_WORDS.join(" ");
@@ -174,7 +166,6 @@ async function runSearch(f) {
     }
     hideStatus();
     render(shown, excluded, { credits, fetched, total });
-    refreshBalance();
   } catch (e) {
     if (e.status === 401) { showApp(false); return; }
     showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
