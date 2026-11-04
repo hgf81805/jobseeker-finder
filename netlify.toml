@@ -13,3 +13,9 @@
     X-Robots-Tag = "noindex, nofollow"
     X-Frame-Options = "DENY"
     Referrer-Policy = "no-referrer"
+
+# 1日の上限を変えるページ
+[[redirects]]
+  from = "/up"
+  to = "/up.html"
+  status = 200

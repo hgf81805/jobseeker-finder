@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>1日の上限 | ポスト検索</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+.up { max-width: 460px; margin: 0 auto; padding: 40px 16px; display: grid; gap: 18px; }
+.up form { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: grid; gap: 14px; }
+.meter { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--accent); width: 0; }
+.meter.over span { background: var(--bad); }
+.big { font-family: var(--font-display); font-size: 28px; font-variant-numeric: tabular-nums; }
+.msg { font-size: 13px; min-height: 1.4em; margin: 0; }
+.msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
+.presets-up { display: flex; gap: 6px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<main class="up">
+  <header>
+    <h1>1日の上限</h1>
+    <p class="lead">1日（日本時間）に検索で使えるクレジットの上限を変えます。保存するとすぐに反映されます。</p>
+  </header>
+
+  <div class="status warn" id="needLogin" hidden>ログインが必要です。<a href="/">ポスト検索</a>でログインしてから、このページを開き直してください。</div>
+
+  <form id="upForm" novalidate hidden>
+    <div>
+      <div class="lead">今日の使用量</div>
+      <div class="big"><span id="used">—</span> <small class="lead">／ <span id="limitNow">—</span> クレジット</small></div>
+    </div>
+    <div class="meter" id="meter"><span></span></div>
+    <div class="field">
+      <label for="limit">1日の上限（クレジット）</label>
+      <div class="num"><input id="limit" type="number" min="0" max="15000" step="10" inputmode="numeric"><span>クレジット</span></div>
+    </div>
+    <div class="presets-up" aria-label="よく使う値">
+      <button type="button" class="preset" data-v="300">300</button>
+      <button type="button" class="preset" data-v="500">500（ひと月15,000の均等割り）</button>
+      <button type="button" class="preset" data-v="700">700</button>
+      <button type="button" class="preset" data-v="1000">1,000</button>
+    </div>
+    <p class="msg" id="msg" role="status"></p>
+    <button class="btn-primary" id="save" type="submit" style="padding:12px">上限を保存</button>
+    <a href="/" class="lead">← ポスト検索に戻る</a>
+  </form>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+function show(u) {
+  $("used").textContent = u.used == null ? "—" : u.used.toLocaleString();
+  $("limitNow").textContent = u.limit.toLocaleString();
+  if (document.activeElement !== $("limit")) $("limit").value = u.limit;
+  const pct = u.used == null || !u.limit ? 0 : Math.min(100, u.used / u.limit * 100);
+  $("meter").firstElementChild.style.width = pct + "%";
+  $("meter").classList.toggle("over", u.used != null && u.used >= u.limit);
+}
+async function load() {
+  const r = await fetch("/api/usage", { credentials: "same-origin" });
+  if (r.status === 401) { $("needLogin").hidden = false; return; }
+  $("upForm").hidden = false;
+  show(await r.json());
+}
+document.querySelectorAll(".preset").forEach(b => b.addEventListener("click", () => { $("limit").value = b.dataset.v; }));
+$("upForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("save").disabled = true; $("msg").className = "msg"; $("msg").textContent = "保存しています…";
+  try {
+    const r = await fetch("/api/usage", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit: $("limit").value }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.message || "保存できませんでした。");
+    show(d);
+    $("msg").className = "msg ok"; $("msg").textContent = `上限を ${d.limit.toLocaleString()} クレジットにしました。`;
+  } catch (e) {
+    $("msg").className = "msg bad"; $("msg").textContent = e.message;
+  } finally { $("save").disabled = false; }
+});
+load();
+</script>
+</body>
+</html>
