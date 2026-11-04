@@ -27,7 +27,7 @@ export default async (req) => {
     const data = await throkGet("/post/search", {
       keywords,
       language: "ja",
-      post_type: body.threadOnly === false ? "all" : "thread",
+      post_type: "thread", // 返信は除き、元投稿だけ（常に）
       from_timestamp: from,
       sort: "replies:asc",
       size,

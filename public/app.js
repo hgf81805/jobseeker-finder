@@ -99,7 +99,7 @@ function readForm() {
   const want = clampInt($("want").value, 1, 10, 10); $("want").value = want;
   return {
     keywords: parseKeywords($("q").value), days, maxReplies, maxLikes, want,
-    noVendor: $("noVendor").checked, threadOnly: $("threadOnly").checked, onlyNew: $("onlyNew").checked,
+    noVendor: $("noVendor").checked, onlyNew: $("onlyNew").checked,
     vendorWords: parseKeywords($("vendorWords").value)
   };
 }
@@ -153,7 +153,7 @@ async function runSearch(f) {
     // 20件取る → 無料の判定で外す → 必要な分だけ存在確認 → まだ足りなければ次の20件
     for (let page = 1; page <= MAX_PAGES && shown.length < f.want && liveChecked < MAX_LIVE; page++) {
       prog(`投稿を検索中… ${page}ページ目`);
-      const p = await api("/api/search", { keywords: f.keywords, days: f.days, threadOnly: f.threadOnly, size: PAGE_SIZE, page, since });
+      const p = await api("/api/search", { keywords: f.keywords, days: f.days, size: PAGE_SIZE, page, since });
       const items = p.content || [];
       const meta = p.metadata || {};
       credits += meta.credits_consumed || 0;
@@ -440,11 +440,8 @@ function applyMode() {
 document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => {
   searchMode = b.dataset.mode;
   try { localStorage.setItem("jf-search-mode", searchMode); } catch (e) {}
-  // 節約方式では「返信は除き、元投稿だけ」を既定にする
-  if (searchMode === "saving") $("threadOnly").checked = true;
   applyMode();
 }));
-if (searchMode === "saving") $("threadOnly").checked = true;
 applyMode();
 
 // 節約方式：20件ずつ投稿者情報つき（1件2）で取り、無料の判定だけで10件そろえる
@@ -460,7 +457,7 @@ async function runSearchSaving(f) {
     }
     for (let page = 1; page <= MAX_PAGES && shown.length < f.want; page++) {
       prog(`投稿を検索中… ${page}ページ目`);
-      const p = await api("/api/search", { keywords: f.keywords, days: f.days, threadOnly: f.threadOnly, size: PAGE_SIZE, page, since, details: true });
+      const p = await api("/api/search", { keywords: f.keywords, days: f.days, size: PAGE_SIZE, page, since, details: true });
       const items = p.content || [];
       const meta = p.metadata || {};
       credits += meta.credits_consumed || 0;
