@@ -53,13 +53,22 @@ $("loginForm").addEventListener("submit", async ev => {
     await api("/api/login", { email: $("loginEmail").value, password: $("loginPass").value, keep: $("loginKeep").checked });
     $("loginPass").value = "";
     await checkSession();
+    refreshUsage();
   } catch (e) {
     $("loginErr").textContent = e.status === 401 ? "メールアドレスかパスワードが違います。" : "ログインできませんでした。時間をおいてもう一度お試しください。";
     $("loginPass").value = "";
   } finally { $("loginBtn").disabled = false; }
 });
 $("logout").addEventListener("click", async () => { try { await api("/api/logout", {}); } catch (e) {} showApp(false); });
-checkSession();
+checkSession().then(() => { if (!$("app").hidden) refreshUsage(); });
+
+// 今日（日本時間）使ったクレジット ／ 1日の上限
+async function refreshUsage() {
+  try {
+    const u = await api("/api/usage");
+    $("usage").textContent = u.used == null ? "—" : `${u.used.toLocaleString()} ／ ${u.limit.toLocaleString()} クレジット`;
+  } catch (e) { $("usage").textContent = "—"; }
+}
 
 // 検索フォーム
 $("vendorWords").value = DEFAULT_VENDOR_WORDS.join(" ");
@@ -215,10 +224,12 @@ async function runSearch(f) {
     hideStatus();
     render(shown, excluded, { credits, fetched, total, since });
     saveSearch(f, shown, excluded, skipList, { credits, fetched });
+    refreshUsage();
   } catch (e) {
     if (e.status === 401) { showApp(false); return; }
     showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
     if (credits) render([], excluded, { credits, fetched, total });
+    refreshUsage();
   }
 }
 
