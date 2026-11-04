@@ -88,7 +88,7 @@ function readForm() {
   const want = clampInt($("want").value, 1, 10, 10); $("want").value = want;
   return {
     keywords: parseKeywords($("q").value), days, maxReplies, maxLikes, want,
-    noVendor: $("noVendor").checked, threadOnly: $("threadOnly").checked,
+    noVendor: $("noVendor").checked, threadOnly: $("threadOnly").checked, onlyNew: $("onlyNew").checked,
     vendorWords: parseKeywords($("vendorWords").value)
   };
 }
@@ -130,11 +130,17 @@ async function runSearch(f) {
   showStatus("info", '<span class="progress" id="prog">検索しています…</span>');
   const prog = msg => { const el = $("prog"); if (el) el.textContent = msg; };
   const excluded = [], passed = [], seen = new Set();
-  let credits = 0, fetched = 0, total = null;
+  const skipList = [];
+  let credits = 0, fetched = 0, total = null, since = null;
   try {
+    // 同じキーワードを前に検索していれば、その1日前より後の投稿だけを取る（取り込みの遅れに備えて1日重ねる）
+    if (hasDb && f.onlyNew) {
+      const last = await api("/api/last-search", { keywords: f.keywords }).catch(() => ({ at: null }));
+      if (last.at) since = Math.floor(Date.parse(last.at) / 1000) - 24 * 3600;
+    }
     for (let page = 1; page <= MAX_PAGES; page++) {
       prog(`投稿を検索中… ${page}ページ目`);
-      const p = await api("/api/search", { keywords: f.keywords, days: f.days, threadOnly: f.threadOnly, size: PAGE_SIZE, page });
+      const p = await api("/api/search", { keywords: f.keywords, days: f.days, threadOnly: f.threadOnly, size: PAGE_SIZE, page, since });
       const items = p.content || [];
       const meta = p.metadata || {};
       credits += meta.credits_consumed || 0;
@@ -155,12 +161,15 @@ async function runSearch(f) {
       if (overReplies || items.length < PAGE_SIZE || passed.length >= MAX_LIVE) break;
     }
 
-    // 候補一覧に登録済みの投稿は確認せずに外す（クレジットの節約）
-    const known = await api("/api/known", { codes: passed.map(p => p.post.code) }).catch(() => ({ codes: {}, vendors: [] }));
+    // 候補一覧に登録済みの投稿と、前に業者・削除済みと分かった投稿は確認せずに外す（クレジットの節約）
+    const known = await api("/api/known", { codes: passed.map(p => p.post.code) }).catch(() => ({ codes: {}, skipped: {}, vendors: [] }));
     const fresh = [];
     for (const it of passed) {
       const st = known.codes && known.codes[it.post.code];
+      const sk = known.skipped && known.skipped[it.post.code];
       if (st) excluded.push({ it, tag: "dup", label: "登録済み", why: `候補一覧に登録済み（${STATUS_LABEL[st] || st}）` });
+      else if (sk === "deleted") excluded.push({ it, tag: "deleted", label: "削除済み", why: "前回の確認で削除済み" });
+      else if (sk === "vendor" && f.noVendor) excluded.push({ it, tag: "vendor", label: "業者", why: "前回の確認で業者と判定" });
       else fresh.push(it);
     }
 
@@ -176,7 +185,11 @@ async function runSearch(f) {
       const alive = [];
       for (const it of batch) {
         const r = byCode.get(it.post.code);
-        if (!r || !r.success) { excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" }); continue; }
+        if (!r || !r.success) {
+          excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" });
+          skipList.push({ code: it.post.code, reason: "deleted" });
+          continue;
+        }
         alive.push({ post: { ...it.post, ...r.post, url: r.post.url || it.post.url }, user: r.user || it.user });
       }
       const names = alive.map(a => a.user && a.user.username).filter(Boolean);
@@ -184,15 +197,24 @@ async function runSearch(f) {
       for (const withUser of alive) {
         const live = withUser.post;
         if ((live.reply_count || 0) > f.maxReplies) { excluded.push({ it: withUser, tag: "replies", label: "コメント数", why: `確認時点でコメント${live.reply_count}件` }); continue; }
-        if (withUser.user && vendorSet.has(withUser.user.username)) { excluded.push({ it: withUser, tag: "vendor", label: "業者", why: "業者として登録済みの投稿者" }); continue; }
+        const uname = withUser.user && withUser.user.username;
+        if (uname && vendorSet.has(uname)) {
+          excluded.push({ it: withUser, tag: "vendor", label: "業者", why: "業者として登録済みの投稿者" });
+          skipList.push({ code: live.code, reason: "vendor", username: uname });
+          continue;
+        }
         const nr = f.noVendor ? nameVendorReason(withUser.user) : null;
-        if (nr) { excluded.push({ it: withUser, tag: "vendor", label: "業者", why: nr }); continue; }
+        if (nr) {
+          excluded.push({ it: withUser, tag: "vendor", label: "業者", why: nr });
+          skipList.push({ code: live.code, reason: "vendor", username: uname });
+          continue;
+        }
         if (shown.length < f.want) shown.push({ ...withUser, verified: true });
       }
     }
     hideStatus();
-    render(shown, excluded, { credits, fetched, total });
-    saveSearch(f, shown, excluded, { credits, fetched });
+    render(shown, excluded, { credits, fetched, total, since });
+    saveSearch(f, shown, excluded, skipList, { credits, fetched });
   } catch (e) {
     if (e.status === 401) { showApp(false); return; }
     showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
@@ -205,7 +227,8 @@ function render(shown, excluded, stats) {
   $("summary").innerHTML = [
     ["該当", stats.total != null ? stats.total.toLocaleString() + (stats.total >= 10000 ? "+" : "") : "—"],
     ["確認", stats.fetched], ["表示", shown.length], ["業者を除外", count("vendor")],
-    ["削除済みを除外", count("deleted")], ["件数超えを除外", count("replies")], ["使ったクレジット", stats.credits]
+    ["削除済みを除外", count("deleted")], ["件数超えを除外", count("replies")], ["使ったクレジット", stats.credits],
+    ...(stats.since ? [["取得した範囲", `${fmtTime(stats.since)} 以降`]] : [])
   ].map(([k, v]) => `<span class="s">${k}<b>${v}</b></span>`).join("");
   $("summary").hidden = false;
 
@@ -229,7 +252,9 @@ function render(shown, excluded, stats) {
         <button type="button" class="act" data-set="vendor" aria-pressed="false">業者</button>
       </div>` : ""}
     </article>`).join("")
-    : `<div class="empty">条件に合う投稿が見つかりませんでした。期間を延ばすか、コメント数の上限を上げるか、キーワードを足してください。</div>`;
+    : stats.since
+      ? `<div class="empty">前回の同じ検索より後に、条件に合う新しい投稿はありませんでした。すべての期間を見直すときは「前回の検索より後の投稿だけ」のチェックを外してください。</div>`
+      : `<div class="empty">条件に合う投稿が見つかりませんでした。期間を延ばすか、コメント数の上限を上げるか、キーワードを足してください。</div>`;
 
   $("exSummary").textContent = `除外した投稿（${excluded.length}件）`;
   // 1行に縮めて表示し、押すと本文の全文と Threads へのリンクを開く
@@ -259,14 +284,15 @@ function render(shown, excluded, stats) {
 }
 
 // 検索1回分の履歴と、表示した投稿を候補として保存する
-function saveSearch(f, shown, excluded, stats) {
+function saveSearch(f, shown, excluded, skipList, stats) {
   if (!hasDb) return;
   api("/api/record", {
     search: { keywords: f.keywords, days: f.days, maxReplies: f.maxReplies, fetched: stats.fetched, shown: shown.length, excluded: excluded.length, credits: stats.credits },
     items: shown.map(({ post, user }) => ({
       code: post.code, url: post.url, caption: post.caption, posted_at: post.post_timestamp,
       username: user && user.username, full_name: user && user.full_name
-    }))
+    })),
+    skipped: skipList
   }).catch(() => {});
 }
 

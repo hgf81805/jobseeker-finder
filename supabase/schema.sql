@@ -52,3 +52,12 @@ alter table public.searches enable row level security;
 alter table public.authors enable row level security;
 alter table public.candidates enable row level security;
 alter table public.usage_log enable row level security;
+
+-- 存在確認で外れた投稿（業者・削除済み）。次の検索では確認せずに外す
+create table if not exists public.skipped_posts (
+  code text primary key,
+  reason text not null check (reason in ('vendor', 'deleted')),
+  username text,
+  at timestamptz not null default now()
+);
+alter table public.skipped_posts enable row level security;

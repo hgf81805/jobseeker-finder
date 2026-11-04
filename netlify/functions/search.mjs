@@ -15,6 +15,11 @@ export default async (req) => {
     .map(k => String(k).trim()).filter(Boolean).slice(0, 30);
   if (!keywords.length) return json(400, { error: "bad_request", message: "キーワードを1つ以上入れてください。" });
   const size = clamp(body.size, 1, 30, 30);
+  // 期間の始まり。前回の検索日時（since）が期間内なら、そこから後だけを取る
+  const days = clamp(body.days, 1, 7, 5);
+  const windowStart = Math.floor(Date.now() / 1000) - days * 24 * 3600;
+  const since = parseInt(body.since, 10);
+  const from = Number.isNaN(since) ? windowStart : Math.max(windowStart, since);
   const blocked = await overBudget(size);
   if (blocked) return blocked;
   try {
@@ -22,7 +27,7 @@ export default async (req) => {
       keywords,
       language: "ja",
       post_type: body.threadOnly === false ? "all" : "thread",
-      max_age_hours: clamp(body.days, 1, 7, 5) * 24,
+      from_timestamp: from,
       sort: "replies:asc",
       size,
       page: clamp(body.page, 1, 2, 1),
