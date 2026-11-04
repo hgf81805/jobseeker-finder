@@ -26,6 +26,7 @@ const fmtTime = ts => new Date(ts * 1000).toLocaleString("ja-JP", { timeZone: "A
 
 const STATUS_LABEL = { new: "候補", contacted: "声かけ済", replied: "返信あり", meeting: "面談", won: "成約", skip: "対象外", vendor: "業者" };
 let hasDb = false;
+let searchMode = "saving";
 
 class ApiError extends Error { constructor(status, body) { super(body.message || "エラー"); this.status = status; this.code = body.error; } }
 async function api(path, body, method) {
@@ -103,7 +104,7 @@ function readForm() {
   };
 }
 function updateEstimate() {
-  $("estimate").textContent = (PAGE_SIZE * MAX_PAGES + MAX_LIVE * 3).toLocaleString();
+  $("estimate").textContent = (searchMode === "saving" ? PAGE_SIZE * MAX_PAGES * 2 : PAGE_SIZE * MAX_PAGES + MAX_LIVE * 3).toLocaleString();
 }
 ["days", "maxReplies", "maxLikes", "want"].forEach(id => $(id).addEventListener("change", updateEstimate));
 updateEstimate();
@@ -133,7 +134,7 @@ $("form").addEventListener("submit", async ev => {
   const f = readForm();
   if (!f.keywords.length) { showStatus("bad", "キーワードを1つ以上入れてください。"); $("q").focus(); return; }
   running = true; $("go").disabled = true;
-  try { await runSearch(f); } finally { running = false; $("go").disabled = false; }
+  try { await (searchMode === "saving" ? runSearchSaving(f) : runSearch(f)); } finally { running = false; $("go").disabled = false; }
 });
 
 async function runSearch(f) {
@@ -251,7 +252,7 @@ function render(shown, excluded, stats) {
   $("summary").hidden = false;
 
   $("results").innerHTML = shown.length ? shown.map(({ post, user, verified }) => `
-    <article class="card">
+    <article class="card" data-code="${esc(post.code)}">
       <div class="head">
         <span class="who">@${esc(user && user.username)}${user && user.full_name ? `<small>${esc(user.full_name)}</small>` : ""}</span>
         <span class="when">${fmtTime(post.post_timestamp)} 投稿</span>
@@ -263,7 +264,7 @@ function render(shown, excluded, stats) {
           <span>いいね <strong>${post.like_count ?? 0}</strong></span>
           ${post.impression_count != null ? `<span>閲覧 <strong>${post.impression_count}</strong></span>` : ""}
         </span>
-        <span>${verified ? `<span class="pill">表示確認済</span> ` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
+        <span>${verified ? `<span class="pill">表示確認済</span> ` : `<button type="button" class="check-live">削除を確認（3クレジット）</button>`}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
         <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
@@ -427,5 +428,108 @@ $("list").addEventListener("change", ev => {
   if (!card) return;
   if (ev.target.classList.contains("cand-note")) {
     saveCandidate(card, { note: ev.target.value });
+  }
+});
+
+// 検索方式：節約（検索で投稿者情報を付け、存在確認はしない）／確実（存在確認で削除済みを外す）
+try { searchMode = localStorage.getItem("jf-search-mode") === "sure" ? "sure" : "saving"; } catch (e) {}
+function applyMode() {
+  document.querySelectorAll(".mode-btn").forEach(b => b.setAttribute("aria-checked", String(b.dataset.mode === searchMode)));
+  updateEstimate();
+}
+document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => {
+  searchMode = b.dataset.mode;
+  try { localStorage.setItem("jf-search-mode", searchMode); } catch (e) {}
+  applyMode();
+}));
+applyMode();
+
+// 節約方式：20件ずつ投稿者情報つき（1件2）で取り、無料の判定だけで10件そろえる
+async function runSearchSaving(f) {
+  showStatus("info", '<span class="progress" id="prog">検索しています…</span>');
+  const prog = msg => { const el = $("prog"); if (el) el.textContent = msg; };
+  const excluded = [], shown = [], seen = new Set();
+  let credits = 0, fetched = 0, total = null, since = null;
+  try {
+    if (hasDb && f.onlyNew) {
+      const last = await api("/api/last-search", { keywords: f.keywords }).catch(() => ({ at: null }));
+      if (last.at) since = Math.floor(Date.parse(last.at) / 1000) - 24 * 3600;
+    }
+    for (let page = 1; page <= MAX_PAGES && shown.length < f.want; page++) {
+      prog(`投稿を検索中… ${page}ページ目`);
+      const p = await api("/api/search", { keywords: f.keywords, days: f.days, threadOnly: f.threadOnly, size: PAGE_SIZE, page, since, details: true });
+      const items = p.content || [];
+      const meta = p.metadata || {};
+      credits += meta.credits_consumed || 0;
+      if (total == null) total = meta.total_count ?? null;
+      fetched += items.length;
+
+      let overReplies = false;
+      const passed = [];
+      for (const it of items) {
+        if (!it || !it.post || seen.has(it.post.code)) continue;
+        seen.add(it.post.code);
+        const rc = it.post.reply_count || 0;
+        if (rc > f.maxReplies) { excluded.push({ it, tag: "replies", label: "コメント数", why: `コメント${rc}件` }); overReplies = true; continue; }
+        if (f.maxLikes != null && (it.post.like_count || 0) > f.maxLikes) { excluded.push({ it, tag: "replies", label: "いいね数", why: `いいね${it.post.like_count}件` }); continue; }
+        const vr = f.noVendor ? (captionVendorReason(it.post, f.vendorWords) || nameVendorReason(it.user)) : null;
+        if (vr) { excluded.push({ it, tag: "vendor", label: "業者", why: vr }); continue; }
+        passed.push(it);
+      }
+
+      // 登録済み・前に外した投稿・業者と登録済みの投稿者を外す
+      const names = [...new Set(passed.map(x => x.user && x.user.username).filter(Boolean))];
+      const known = passed.length
+        ? await api("/api/known", { codes: passed.map(x => x.post.code), usernames: names }).catch(() => ({ codes: {}, skipped: {}, vendors: [] }))
+        : { codes: {}, skipped: {}, vendors: [] };
+      const vendorSet = new Set(known.vendors || []);
+      for (const it of passed) {
+        const st = known.codes && known.codes[it.post.code];
+        const sk = known.skipped && known.skipped[it.post.code];
+        const uname = it.user && it.user.username;
+        if (st) excluded.push({ it, tag: "dup", label: "登録済み", why: `候補一覧に登録済み（${STATUS_LABEL[st] || st}）` });
+        else if (sk === "deleted") excluded.push({ it, tag: "deleted", label: "削除済み", why: "前回の確認で削除済み" });
+        else if (f.noVendor && (sk === "vendor" || (uname && vendorSet.has(uname)))) excluded.push({ it, tag: "vendor", label: "業者", why: sk === "vendor" ? "前回の確認で業者と判定" : "業者として登録済みの投稿者" });
+        else if (shown.length < f.want) shown.push({ post: it.post, user: it.user, verified: false });
+      }
+      if (overReplies || items.length < PAGE_SIZE) break;
+    }
+    hideStatus();
+    render(shown, excluded, { credits, fetched, total, since });
+    saveSearch(f, shown, excluded, [], { credits, fetched });
+    refreshUsage();
+  } catch (e) {
+    if (e.status === 401) { showApp(false); return; }
+    showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
+    if (credits) render(shown, excluded, { credits, fetched, total, since });
+    refreshUsage();
+  }
+}
+
+// カードの「削除を確認」：その投稿だけ存在確認（3クレジット）
+$("results").addEventListener("click", async ev => {
+  const btn = ev.target.closest(".check-live");
+  if (!btn) return;
+  const card = btn.closest(".card");
+  btn.disabled = true; btn.textContent = "確認中…";
+  try {
+    const p = await api("/api/live", { codes: [card.dataset.code] });
+    const r = (p.content || [])[0];
+    const pill = document.createElement("span");
+    if (r && r.success) {
+      pill.className = "pill"; pill.textContent = "表示確認済";
+      const strongs = card.querySelectorAll(".metrics strong");
+      if (strongs[0] && r.post) strongs[0].textContent = r.post.reply_count ?? strongs[0].textContent;
+      if (strongs[1] && r.post) strongs[1].textContent = r.post.like_count ?? strongs[1].textContent;
+    } else {
+      pill.className = "pill gone"; pill.textContent = "削除済み";
+      card.classList.add("done");
+    }
+    btn.replaceWith(pill);
+    pill.insertAdjacentText("afterend", " ");
+    refreshUsage();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "削除を確認（3クレジット）";
+    alertInline(btn.parentElement, e.status === 429 ? "今日の上限に達しました" : "確認できませんでした");
   }
 });

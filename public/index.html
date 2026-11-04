@@ -59,6 +59,11 @@
   <div class="status warn" id="keyWarn" hidden>検索用の APIキーがサーバーにまだ設定されていません。Netlify の環境変数を設定し、再デプロイしてください（設定する名前は README に記載）。</div>
 
   <div class="view" id="viewSearch">
+  <div class="mode-switch" role="radiogroup" aria-label="検索方式">
+    <span class="lbl">検索方式</span>
+    <button type="button" class="mode-btn" data-mode="saving" role="radio" aria-checked="true">節約<small>投稿者つき・削除は手動で確認</small></button>
+    <button type="button" class="mode-btn" data-mode="sure" role="radio" aria-checked="false">確実<small>削除を自動で確認</small></button>
+  </div>
   <form class="search" id="form" novalidate>
     <div class="searchbar">
       <input id="q" type="search" aria-label="検索キーワード" placeholder="例：転職活動中 転職先を探して 転職したい" autocomplete="off">

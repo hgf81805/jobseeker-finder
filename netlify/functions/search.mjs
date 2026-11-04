@@ -20,7 +20,8 @@ export default async (req) => {
   const windowStart = Math.floor(Date.now() / 1000) - days * 24 * 3600;
   const since = parseInt(body.since, 10);
   const from = Number.isNaN(since) ? windowStart : Math.max(windowStart, since);
-  const blocked = await overBudget(size);
+  const details = body.details === true;
+  const blocked = await overBudget(size * (details ? 2 : 1));
   if (blocked) return blocked;
   try {
     const data = await throkGet("/post/search", {
@@ -31,7 +32,7 @@ export default async (req) => {
       sort: "replies:asc",
       size,
       page: clamp(body.page, 1, 3, 1),
-      include_details: false,
+      include_details: details,
     });
     await recordUsage("search", data);
     return json(200, data);

@@ -1,6 +1,7 @@
 import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { throkGet, throkError } from "../lib/throk.mjs";
 import { overBudget, recordUsage } from "../lib/budget.mjs";
+import { dbEnabled, rest } from "../lib/db.mjs";
 
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
@@ -14,6 +15,10 @@ export default async (req) => {
   try {
     const data = await throkGet("/live/posts", { codes });
     await recordUsage("live", data);
+    const gone = (data.content || []).filter(r => r && r.success === false && r.post_code).map(r => ({ code: String(r.post_code), reason: "deleted" }));
+    if (gone.length && dbEnabled()) {
+      try { await rest("skipped_posts?on_conflict=code", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: gone }); } catch (e) {}
+    }
     return json(200, data);
   } catch (e) {
     return throkError(e);
