@@ -13,6 +13,13 @@ const DEFAULT_VENDOR_WORDS = [
 const NAME_MARKERS = ["転職", "キャリア", "採用", "求人", "人材", "株式会社", "公式", "支援", "コンサル", "ノウハウ", "|", "｜"];
 
 const $ = id => document.getElementById(id);
+// Threads の投稿URL。投稿者が分かれば /@ユーザー名/post/コード、分からなければ短縮形の /t/コード にする
+function threadsUrl(post, user) {
+  const code = encodeURIComponent(post.code || "");
+  if (user && user.username) return `https://www.threads.com/@${encodeURIComponent(user.username)}/post/${code}`;
+  if (post.url && /\/@[^/]+\/post\//.test(post.url)) return post.url;
+  return `https://www.threads.com/t/${code}`;
+}
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtTime = ts => new Date(ts * 1000).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -215,7 +222,7 @@ function render(shown, excluded, stats) {
           <span>いいね <strong>${post.like_count ?? 0}</strong></span>
           ${post.impression_count != null ? `<span>閲覧 <strong>${post.impression_count}</strong></span>` : ""}
         </span>
-        <span>${verified ? `<span class="pill">表示確認済</span> ` : ""}<a href="${esc(post.url)}" target="_blank" rel="noopener">Threadsで開く</a></span>
+        <span>${verified ? `<span class="pill">表示確認済</span> ` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
         <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
@@ -229,11 +236,12 @@ function render(shown, excluded, stats) {
   $("exList").innerHTML = excluded.map(x => {
     const post = x.it.post;
     const user = x.it.user;
-    const url = post.url || `https://www.threads.com/post/${encodeURIComponent(post.code)}`;
+    const url = threadsUrl(post, user);
     return `
     <details class="ex-row">
       <summary><span class="ex-tag ${x.tag}">${esc(x.label)}</span>
-        <span class="t"><b>${user ? "@" + esc(user.username) : "—"}</b>${esc(x.why)} ・ ${esc((post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span></summary>
+        <span class="t"><b>${user ? "@" + esc(user.username) : "—"}</b>${esc(x.why)} ・ ${esc((post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span>
+        <a class="ex-open" href="${esc(url)}" target="_blank" rel="noopener">Threads</a></summary>
       <div class="ex-detail">
         <p>${esc(post.caption)}</p>
         <div class="ex-foot">
@@ -324,7 +332,7 @@ async function loadList() {
             <button type="button" class="act" data-set="vendor" aria-pressed="${c.status === "vendor"}">業者</button>
           </span>
           <span>見つけた日 ${fmtTime(Date.parse(c.found_at) / 1000)}</span>
-          <a href="${esc(c.url)}" target="_blank" rel="noopener">Threadsで開く</a>
+          <a href="${esc(threadsUrl({ code: c.code, url: c.url }, c.username ? { username: c.username } : null))}" target="_blank" rel="noopener">Threadsで開く</a>
           <span class="saved" hidden>保存しました</span>
         </div>
         <textarea class="cand-note" aria-label="メモ" placeholder="メモ（やり取りの内容など）">${esc(c.note || "")}</textarea>
