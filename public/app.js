@@ -440,8 +440,11 @@ function applyMode() {
 document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => {
   searchMode = b.dataset.mode;
   try { localStorage.setItem("jf-search-mode", searchMode); } catch (e) {}
+  // 節約方式では「返信は除き、元投稿だけ」を既定にする
+  if (searchMode === "saving") $("threadOnly").checked = true;
   applyMode();
 }));
+if (searchMode === "saving") $("threadOnly").checked = true;
 applyMode();
 
 // 節約方式：20件ずつ投稿者情報つき（1件2）で取り、無料の判定だけで10件そろえる
