@@ -1,9 +1,7 @@
-// クレジットの上限：検索は1件1（投稿者情報なし）、存在確認は1件3
+// クレジット：検索は1件2（投稿者情報つき）、削除の確認は1件3
 // 検索は20件ずつ取り、表示が足りないときだけ次の20件を取る
 const PAGE_SIZE = 20;
 const MAX_PAGES = 3;
-const LIVE_BATCH = 10;
-const MAX_LIVE = 20;
 const DEFAULT_VENDOR_WORDS = [
   "募集中", "募集して", "採用中", "採用情報", "求人情報", "求人中", "ご応募", "応募はこちら", "応募から",
   "一緒に働きませんか", "働きませんか", "お祝い金", "未経験歓迎", "大歓迎",
@@ -26,7 +24,6 @@ const fmtTime = ts => new Date(ts * 1000).toLocaleString("ja-JP", { timeZone: "A
 
 const STATUS_LABEL = { new: "候補", contacted: "声かけ済", replied: "返信あり", meeting: "面談", won: "成約", skip: "対象外", vendor: "業者" };
 let hasDb = false;
-let searchMode = "saving";
 
 class ApiError extends Error { constructor(status, body) { super(body.message || "エラー"); this.status = status; this.code = body.error; } }
 async function api(path, body, method) {
@@ -104,7 +101,7 @@ function readForm() {
   };
 }
 function updateEstimate() {
-  $("estimate").textContent = (searchMode === "saving" ? PAGE_SIZE * MAX_PAGES * 2 : PAGE_SIZE * MAX_PAGES + MAX_LIVE * 3).toLocaleString();
+  $("estimate").textContent = (PAGE_SIZE * MAX_PAGES * 2).toLocaleString();
 }
 ["days", "maxReplies", "maxLikes", "want"].forEach(id => $(id).addEventListener("change", updateEstimate));
 updateEstimate();
@@ -134,112 +131,9 @@ $("form").addEventListener("submit", async ev => {
   const f = readForm();
   if (!f.keywords.length) { showStatus("bad", "キーワードを1つ以上入れてください。"); $("q").focus(); return; }
   running = true; $("go").disabled = true;
-  try { await (searchMode === "saving" ? runSearchSaving(f) : runSearch(f)); } finally { running = false; $("go").disabled = false; }
+  try { await runSearch(f); } finally { running = false; $("go").disabled = false; }
 });
 
-async function runSearch(f) {
-  showStatus("info", '<span class="progress" id="prog">検索しています…</span>');
-  const prog = msg => { const el = $("prog"); if (el) el.textContent = msg; };
-  const excluded = [], shown = [], seen = new Set();
-  const skipList = [];
-  let credits = 0, fetched = 0, total = null, since = null, liveChecked = 0;
-  try {
-    // 同じキーワードを前に検索していれば、その1日前より後の投稿だけを取る（取り込みの遅れに備えて1日重ねる）
-    if (hasDb && f.onlyNew) {
-      const last = await api("/api/last-search", { keywords: f.keywords }).catch(() => ({ at: null }));
-      if (last.at) since = Math.floor(Date.parse(last.at) / 1000) - 24 * 3600;
-    }
-
-    // 20件取る → 無料の判定で外す → 必要な分だけ存在確認 → まだ足りなければ次の20件
-    for (let page = 1; page <= MAX_PAGES && shown.length < f.want && liveChecked < MAX_LIVE; page++) {
-      prog(`投稿を検索中… ${page}ページ目`);
-      const p = await api("/api/search", { keywords: f.keywords, days: f.days, size: PAGE_SIZE, page, since });
-      const items = p.content || [];
-      const meta = p.metadata || {};
-      credits += meta.credits_consumed || 0;
-      if (total == null) total = meta.total_count ?? null;
-      fetched += items.length;
-
-      let overReplies = false;
-      const passed = [];
-      for (const it of items) {
-        if (!it || !it.post || seen.has(it.post.code)) continue;
-        seen.add(it.post.code);
-        const rc = it.post.reply_count || 0;
-        if (rc > f.maxReplies) { excluded.push({ it, tag: "replies", label: "コメント数", why: `コメント${rc}件` }); overReplies = true; continue; }
-        if (f.maxLikes != null && (it.post.like_count || 0) > f.maxLikes) { excluded.push({ it, tag: "replies", label: "いいね数", why: `いいね${it.post.like_count}件` }); continue; }
-        const vr = f.noVendor ? captionVendorReason(it.post, f.vendorWords) : null;
-        if (vr) { excluded.push({ it, tag: "vendor", label: "業者", why: vr }); continue; }
-        passed.push(it);
-      }
-
-      // 候補一覧に登録済みの投稿と、前に業者・削除済みと分かった投稿は確認せずに外す
-      const known = passed.length ? await api("/api/known", { codes: passed.map(x => x.post.code) }).catch(() => ({ codes: {}, skipped: {} })) : { codes: {}, skipped: {} };
-      const fresh = [];
-      for (const it of passed) {
-        const st = known.codes && known.codes[it.post.code];
-        const sk = known.skipped && known.skipped[it.post.code];
-        if (st) excluded.push({ it, tag: "dup", label: "登録済み", why: `候補一覧に登録済み（${STATUS_LABEL[st] || st}）` });
-        else if (sk === "deleted") excluded.push({ it, tag: "deleted", label: "削除済み", why: "前回の確認で削除済み" });
-        else if (sk === "vendor" && f.noVendor) excluded.push({ it, tag: "vendor", label: "業者", why: "前回の確認で業者と判定" });
-        else fresh.push(it);
-      }
-
-      // 存在確認：足りない件数＋2件ずつ確認し、そろったら止める（全体で最大 MAX_LIVE 件）
-      for (let i = 0; i < fresh.length && shown.length < f.want && liveChecked < MAX_LIVE;) {
-        const size = Math.min(LIVE_BATCH, f.want - shown.length + 2, MAX_LIVE - liveChecked);
-        const batch = fresh.slice(i, i + size);
-        i += batch.length;
-        liveChecked += batch.length;
-        prog(`削除されていないか確認中… ${liveChecked}件目まで`);
-        const lp = await api("/api/live", { codes: batch.map(b => b.post.code) });
-        credits += (lp.metadata && lp.metadata.credits_consumed) || 0;
-        const byCode = new Map((lp.content || []).map(r => [r.post_code, r]));
-        const alive = [];
-        for (const it of batch) {
-          const r = byCode.get(it.post.code);
-          if (!r || !r.success) {
-            excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" });
-            skipList.push({ code: it.post.code, reason: "deleted" });
-            continue;
-          }
-          alive.push({ post: { ...it.post, ...r.post, url: r.post.url || it.post.url }, user: r.user || it.user });
-        }
-        const names = alive.map(a => a.user && a.user.username).filter(Boolean);
-        const vendorSet = new Set(names.length ? (await api("/api/known", { usernames: names }).catch(() => ({ vendors: [] }))).vendors || [] : []);
-        for (const withUser of alive) {
-          const live = withUser.post;
-          if ((live.reply_count || 0) > f.maxReplies) { excluded.push({ it: withUser, tag: "replies", label: "コメント数", why: `確認時点でコメント${live.reply_count}件` }); continue; }
-          const uname = withUser.user && withUser.user.username;
-          if (uname && vendorSet.has(uname)) {
-            excluded.push({ it: withUser, tag: "vendor", label: "業者", why: "業者として登録済みの投稿者" });
-            skipList.push({ code: live.code, reason: "vendor", username: uname });
-            continue;
-          }
-          const nr = f.noVendor ? nameVendorReason(withUser.user) : null;
-          if (nr) {
-            excluded.push({ it: withUser, tag: "vendor", label: "業者", why: nr });
-            skipList.push({ code: live.code, reason: "vendor", username: uname });
-            continue;
-          }
-          if (shown.length < f.want) shown.push({ ...withUser, verified: true });
-        }
-      }
-
-      // コメントの少ない順なので、上限を超えたら以降のページも超える。最後のページなら終わり
-      if (overReplies || items.length < PAGE_SIZE) break;
-    }
-    hideStatus();
-    render(shown, excluded, { credits, fetched, total, since });
-    saveSearch(f, shown, excluded, skipList, { credits, fetched });
-    refreshUsage();
-  } catch (e) {
-    if (e.status === 401) { showApp(false); return; }
-    showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
-    if (credits) render(shown, excluded, { credits, fetched, total, since });
-    refreshUsage();
-  }
-}
 
 function render(shown, excluded, stats) {
   const count = tag => excluded.filter(x => x.tag === tag).length;
@@ -431,21 +325,8 @@ $("list").addEventListener("change", ev => {
   }
 });
 
-// 検索方式：節約（検索で投稿者情報を付け、存在確認はしない）／確実（存在確認で削除済みを外す）
-try { searchMode = localStorage.getItem("jf-search-mode") === "sure" ? "sure" : "saving"; } catch (e) {}
-function applyMode() {
-  document.querySelectorAll(".mode-btn").forEach(b => b.setAttribute("aria-checked", String(b.dataset.mode === searchMode)));
-  updateEstimate();
-}
-document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => {
-  searchMode = b.dataset.mode;
-  try { localStorage.setItem("jf-search-mode", searchMode); } catch (e) {}
-  applyMode();
-}));
-applyMode();
-
-// 節約方式：20件ずつ投稿者情報つき（1件2）で取り、無料の判定だけで10件そろえる
-async function runSearchSaving(f) {
+// 20件ずつ投稿者情報つき（1件2）で取り、無料の判定だけで表示件数をそろえる。削除の確認はカードのボタンで
+async function runSearch(f) {
   showStatus("info", '<span class="progress" id="prog">検索しています…</span>');
   const prog = msg => { const el = $("prog"); if (el) el.textContent = msg; };
   const excluded = [], shown = [], seen = new Set();
