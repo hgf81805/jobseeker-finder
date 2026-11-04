@@ -93,7 +93,9 @@ details.excluded { background: var(--surface); border: 1px solid var(--line); bo
 details.excluded summary { cursor: pointer; padding: 12px 16px; font-size: 14px; font-weight: 500; }
 .ex-list { border-top: 1px solid var(--line); max-height: 420px; overflow: auto; }
 .ex-row { border-bottom: 1px solid var(--line); font-size: 13px; }
-.ex-row summary { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: start; padding: 8px 16px; cursor: pointer; list-style: none; }
+.ex-row summary { display: grid; grid-template-columns: 110px 1fr auto auto; gap: 10px; align-items: start; padding: 8px 16px; cursor: pointer; list-style: none; }
+.ex-actions { display: inline-flex; gap: 4px; }
+.ex-actions .act { padding: 1px 8px; }
 .ex-open { color: var(--accent); font-weight: 700; font-size: 12px; text-decoration: none; white-space: nowrap; }
 .ex-open:hover { text-decoration: underline; }
 .ex-row summary::-webkit-details-marker { display: none; }
@@ -147,7 +149,7 @@ details.adv .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
   .filters { grid-template-columns: repeat(2, 1fr); }
   .searchbar { flex-direction: column; }
   .btn-primary { padding: 12px; }
-  .ex-row summary { grid-template-columns: 1fr auto; gap: 2px 10px; }
+  .ex-row summary { grid-template-columns: 1fr auto auto; gap: 2px 10px; }
   .ex-row summary .t { grid-column: 1 / -1; }
   .ex-detail { padding-left: 16px; }
 }

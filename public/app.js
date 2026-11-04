@@ -276,7 +276,8 @@ function render(shown, excluded, stats) {
 
   $("exSummary").textContent = `除外した投稿（${excluded.length}件）`;
   // 1行に縮めて表示し、押すと本文の全文と Threads へのリンクを開く
-  $("exList").innerHTML = excluded.map(x => {
+  lastExcluded = excluded;
+  $("exList").innerHTML = excluded.map((x, idx) => {
     const post = x.it.post;
     const user = x.it.user;
     const url = threadsUrl(post, user);
@@ -284,7 +285,11 @@ function render(shown, excluded, stats) {
     <details class="ex-row">
       <summary><span class="ex-tag ${x.tag}">${esc(x.label)}</span>
         <span class="t"><b>${user ? "@" + esc(user.username) : "—"}</b>${esc(x.why)} ・ ${esc((post.caption || "").replace(/\s+/g, " ").slice(0, 60))}</span>
-        <a class="ex-open" href="${esc(url)}" target="_blank" rel="noopener">Threads</a></summary>
+        <a class="ex-open" href="${esc(url)}" target="_blank" rel="noopener">Threads</a>
+        ${hasDb ? `<span class="actions ex-actions" data-ex="${idx}">
+          <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
+          <button type="button" class="act" data-set="vendor" aria-pressed="false">業者</button>
+        </span>` : ""}</summary>
       <div class="ex-detail">
         <p>${esc(post.caption)}</p>
         <div class="ex-foot">
@@ -334,6 +339,29 @@ async function onMarkClick(ev) {
   } finally { btn.disabled = false; }
 }
 $("results").addEventListener("click", onMarkClick);
+
+// 除外した投稿の「対象外」「業者」ボタン。押すと候補一覧に印付きで登録し、もう一度押すと登録を取り消す
+let lastExcluded = [];
+$("exList").addEventListener("click", async ev => {
+  const btn = ev.target.closest(".act");
+  if (!btn) return;
+  ev.preventDefault(); // 行の開け閉めはしない
+  const box = btn.closest(".actions");
+  const x = lastExcluded[Number(box.dataset.ex)];
+  if (!x) return;
+  const post = x.it.post, user = x.it.user;
+  const next = btn.getAttribute("aria-pressed") === "true" ? "none" : btn.dataset.set;
+  btn.disabled = true;
+  try {
+    await api("/api/candidates", {
+      status: next,
+      post: { code: post.code, url: threadsUrl(post, user), caption: post.caption, posted_at: post.post_timestamp, username: user && user.username, full_name: user && user.full_name }
+    });
+    box.querySelectorAll(".act").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === next)));
+  } catch (e) {
+    alertInline(box, "保存できませんでした");
+  } finally { btn.disabled = false; }
+});
 $("list").addEventListener("click", onMarkClick);
 function alertInline(el, text) {
   const s = document.createElement("span");
