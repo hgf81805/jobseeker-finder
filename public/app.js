@@ -91,11 +91,9 @@ function clampInt(v, min, max, fallback) {
 function readForm() {
   const days = clampInt($("days").value, 1, 7, 5); $("days").value = days;
   const maxReplies = clampInt($("maxReplies").value, 0, 999, 0); $("maxReplies").value = maxReplies;
-  const likesRaw = $("maxLikes").value.trim();
-  const maxLikes = likesRaw === "" ? null : clampInt(likesRaw, 0, 1e7, null);
   const want = clampInt($("want").value, 1, 10, 10); $("want").value = want;
   return {
-    keywords: parseKeywords($("q").value), days, maxReplies, maxLikes, want,
+    keywords: parseKeywords($("q").value), days, maxReplies, want,
     noVendor: $("noVendor").checked, onlyNew: $("onlyNew").checked,
     vendorWords: parseKeywords($("vendorWords").value)
   };
@@ -103,7 +101,7 @@ function readForm() {
 function updateEstimate() {
   $("estimate").textContent = (PAGE_SIZE * MAX_PAGES * 2).toLocaleString();
 }
-["days", "maxReplies", "maxLikes", "want"].forEach(id => $(id).addEventListener("change", updateEstimate));
+["days", "maxReplies", "want"].forEach(id => $(id).addEventListener("change", updateEstimate));
 updateEstimate();
 
 // 本文での判定は検索直後に、表示名での判定は存在確認で投稿者が分かってから行う
@@ -352,7 +350,6 @@ async function runSearch(f) {
         seen.add(it.post.code);
         const rc = it.post.reply_count || 0;
         if (rc > f.maxReplies) { excluded.push({ it, tag: "replies", label: "コメント数", why: `コメント${rc}件` }); overReplies = true; continue; }
-        if (f.maxLikes != null && (it.post.like_count || 0) > f.maxLikes) { excluded.push({ it, tag: "replies", label: "いいね数", why: `いいね${it.post.like_count}件` }); continue; }
         const vr = f.noVendor ? (captionVendorReason(it.post, f.vendorWords) || nameVendorReason(it.user)) : null;
         if (vr) { excluded.push({ it, tag: "vendor", label: "業者", why: vr }); continue; }
         passed.push(it);
