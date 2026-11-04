@@ -30,7 +30,7 @@ export default async (req) => {
       from_timestamp: from,
       sort: "replies:asc",
       size,
-      page: clamp(body.page, 1, 2, 1),
+      page: clamp(body.page, 1, 3, 1),
       include_details: false,
     });
     await recordUsage("search", data);

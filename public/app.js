@@ -1,6 +1,7 @@
 // クレジットの上限：検索は1件1（投稿者情報なし）、存在確認は1件3
-const PAGE_SIZE = 30;
-const MAX_PAGES = 2;
+// 検索は20件ずつ取り、表示が足りないときだけ次の20件を取る
+const PAGE_SIZE = 20;
+const MAX_PAGES = 3;
 const LIVE_BATCH = 10;
 const MAX_LIVE = 20;
 const DEFAULT_VENDOR_WORDS = [
@@ -138,16 +139,18 @@ $("form").addEventListener("submit", async ev => {
 async function runSearch(f) {
   showStatus("info", '<span class="progress" id="prog">検索しています…</span>');
   const prog = msg => { const el = $("prog"); if (el) el.textContent = msg; };
-  const excluded = [], passed = [], seen = new Set();
+  const excluded = [], shown = [], seen = new Set();
   const skipList = [];
-  let credits = 0, fetched = 0, total = null, since = null;
+  let credits = 0, fetched = 0, total = null, since = null, liveChecked = 0;
   try {
     // 同じキーワードを前に検索していれば、その1日前より後の投稿だけを取る（取り込みの遅れに備えて1日重ねる）
     if (hasDb && f.onlyNew) {
       const last = await api("/api/last-search", { keywords: f.keywords }).catch(() => ({ at: null }));
       if (last.at) since = Math.floor(Date.parse(last.at) / 1000) - 24 * 3600;
     }
-    for (let page = 1; page <= MAX_PAGES; page++) {
+
+    // 20件取る → 無料の判定で外す → 必要な分だけ存在確認 → まだ足りなければ次の20件
+    for (let page = 1; page <= MAX_PAGES && shown.length < f.want && liveChecked < MAX_LIVE; page++) {
       prog(`投稿を検索中… ${page}ページ目`);
       const p = await api("/api/search", { keywords: f.keywords, days: f.days, threadOnly: f.threadOnly, size: PAGE_SIZE, page, since });
       const items = p.content || [];
@@ -155,7 +158,9 @@ async function runSearch(f) {
       credits += meta.credits_consumed || 0;
       if (total == null) total = meta.total_count ?? null;
       fetched += items.length;
+
       let overReplies = false;
+      const passed = [];
       for (const it of items) {
         if (!it || !it.post || seen.has(it.post.code)) continue;
         seen.add(it.post.code);
@@ -166,60 +171,62 @@ async function runSearch(f) {
         if (vr) { excluded.push({ it, tag: "vendor", label: "業者", why: vr }); continue; }
         passed.push(it);
       }
-      // コメントの少ない順なので、上限を超えたら以降のページも超える
-      if (overReplies || items.length < PAGE_SIZE || passed.length >= MAX_LIVE) break;
-    }
 
-    // 候補一覧に登録済みの投稿と、前に業者・削除済みと分かった投稿は確認せずに外す（クレジットの節約）
-    const known = await api("/api/known", { codes: passed.map(p => p.post.code) }).catch(() => ({ codes: {}, skipped: {}, vendors: [] }));
-    const fresh = [];
-    for (const it of passed) {
-      const st = known.codes && known.codes[it.post.code];
-      const sk = known.skipped && known.skipped[it.post.code];
-      if (st) excluded.push({ it, tag: "dup", label: "登録済み", why: `候補一覧に登録済み（${STATUS_LABEL[st] || st}）` });
-      else if (sk === "deleted") excluded.push({ it, tag: "deleted", label: "削除済み", why: "前回の確認で削除済み" });
-      else if (sk === "vendor" && f.noVendor) excluded.push({ it, tag: "vendor", label: "業者", why: "前回の確認で業者と判定" });
-      else fresh.push(it);
-    }
+      // 候補一覧に登録済みの投稿と、前に業者・削除済みと分かった投稿は確認せずに外す
+      const known = passed.length ? await api("/api/known", { codes: passed.map(x => x.post.code) }).catch(() => ({ codes: {}, skipped: {} })) : { codes: {}, skipped: {} };
+      const fresh = [];
+      for (const it of passed) {
+        const st = known.codes && known.codes[it.post.code];
+        const sk = known.skipped && known.skipped[it.post.code];
+        if (st) excluded.push({ it, tag: "dup", label: "登録済み", why: `候補一覧に登録済み（${STATUS_LABEL[st] || st}）` });
+        else if (sk === "deleted") excluded.push({ it, tag: "deleted", label: "削除済み", why: "前回の確認で削除済み" });
+        else if (sk === "vendor" && f.noVendor) excluded.push({ it, tag: "vendor", label: "業者", why: "前回の確認で業者と判定" });
+        else fresh.push(it);
+      }
 
-    // 存在確認：必要な件数がそろった時点で止める（最大 MAX_LIVE 件）
-    const shown = [];
-    const toCheck = fresh.slice(0, MAX_LIVE);
-    for (let i = 0; i < toCheck.length && shown.length < f.want; i += LIVE_BATCH) {
-      const batch = toCheck.slice(i, i + LIVE_BATCH);
-      prog(`削除されていないか確認中… ${Math.min(i + LIVE_BATCH, toCheck.length)}/${toCheck.length}`);
-      const p = await api("/api/live", { codes: batch.map(b => b.post.code) });
-      credits += (p.metadata && p.metadata.credits_consumed) || 0;
-      const byCode = new Map((p.content || []).map(r => [r.post_code, r]));
-      const alive = [];
-      for (const it of batch) {
-        const r = byCode.get(it.post.code);
-        if (!r || !r.success) {
-          excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" });
-          skipList.push({ code: it.post.code, reason: "deleted" });
-          continue;
+      // 存在確認：足りない件数＋2件ずつ確認し、そろったら止める（全体で最大 MAX_LIVE 件）
+      for (let i = 0; i < fresh.length && shown.length < f.want && liveChecked < MAX_LIVE;) {
+        const size = Math.min(LIVE_BATCH, f.want - shown.length + 2, MAX_LIVE - liveChecked);
+        const batch = fresh.slice(i, i + size);
+        i += batch.length;
+        liveChecked += batch.length;
+        prog(`削除されていないか確認中… ${liveChecked}件目まで`);
+        const lp = await api("/api/live", { codes: batch.map(b => b.post.code) });
+        credits += (lp.metadata && lp.metadata.credits_consumed) || 0;
+        const byCode = new Map((lp.content || []).map(r => [r.post_code, r]));
+        const alive = [];
+        for (const it of batch) {
+          const r = byCode.get(it.post.code);
+          if (!r || !r.success) {
+            excluded.push({ it, tag: "deleted", label: "削除済み", why: "Threads で表示できません" });
+            skipList.push({ code: it.post.code, reason: "deleted" });
+            continue;
+          }
+          alive.push({ post: { ...it.post, ...r.post, url: r.post.url || it.post.url }, user: r.user || it.user });
         }
-        alive.push({ post: { ...it.post, ...r.post, url: r.post.url || it.post.url }, user: r.user || it.user });
+        const names = alive.map(a => a.user && a.user.username).filter(Boolean);
+        const vendorSet = new Set(names.length ? (await api("/api/known", { usernames: names }).catch(() => ({ vendors: [] }))).vendors || [] : []);
+        for (const withUser of alive) {
+          const live = withUser.post;
+          if ((live.reply_count || 0) > f.maxReplies) { excluded.push({ it: withUser, tag: "replies", label: "コメント数", why: `確認時点でコメント${live.reply_count}件` }); continue; }
+          const uname = withUser.user && withUser.user.username;
+          if (uname && vendorSet.has(uname)) {
+            excluded.push({ it: withUser, tag: "vendor", label: "業者", why: "業者として登録済みの投稿者" });
+            skipList.push({ code: live.code, reason: "vendor", username: uname });
+            continue;
+          }
+          const nr = f.noVendor ? nameVendorReason(withUser.user) : null;
+          if (nr) {
+            excluded.push({ it: withUser, tag: "vendor", label: "業者", why: nr });
+            skipList.push({ code: live.code, reason: "vendor", username: uname });
+            continue;
+          }
+          if (shown.length < f.want) shown.push({ ...withUser, verified: true });
+        }
       }
-      const names = alive.map(a => a.user && a.user.username).filter(Boolean);
-      const vendorSet = new Set(names.length ? (await api("/api/known", { usernames: names }).catch(() => ({ vendors: [] }))).vendors || [] : []);
-      for (const withUser of alive) {
-        const live = withUser.post;
-        if ((live.reply_count || 0) > f.maxReplies) { excluded.push({ it: withUser, tag: "replies", label: "コメント数", why: `確認時点でコメント${live.reply_count}件` }); continue; }
-        const uname = withUser.user && withUser.user.username;
-        if (uname && vendorSet.has(uname)) {
-          excluded.push({ it: withUser, tag: "vendor", label: "業者", why: "業者として登録済みの投稿者" });
-          skipList.push({ code: live.code, reason: "vendor", username: uname });
-          continue;
-        }
-        const nr = f.noVendor ? nameVendorReason(withUser.user) : null;
-        if (nr) {
-          excluded.push({ it: withUser, tag: "vendor", label: "業者", why: nr });
-          skipList.push({ code: live.code, reason: "vendor", username: uname });
-          continue;
-        }
-        if (shown.length < f.want) shown.push({ ...withUser, verified: true });
-      }
+
+      // コメントの少ない順なので、上限を超えたら以降のページも超える。最後のページなら終わり
+      if (overReplies || items.length < PAGE_SIZE) break;
     }
     hideStatus();
     render(shown, excluded, { credits, fetched, total, since });
@@ -228,7 +235,7 @@ async function runSearch(f) {
   } catch (e) {
     if (e.status === 401) { showApp(false); return; }
     showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
-    if (credits) render([], excluded, { credits, fetched, total });
+    if (credits) render(shown, excluded, { credits, fetched, total, since });
     refreshUsage();
   }
 }
