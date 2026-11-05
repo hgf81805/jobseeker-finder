@@ -270,7 +270,7 @@ document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () =>
   if (t.dataset.view === "list") loadList();
 }));
 
-let listStatus = "";
+let listStatus = "not_vendor"; // 候補一覧の最初の絞り込みは「業者以外」
 document.querySelectorAll("#listFilter .chip-btn").forEach(c => c.addEventListener("click", () => {
   document.querySelectorAll("#listFilter .chip-btn").forEach(x => x.setAttribute("aria-pressed", String(x === c)));
   listStatus = c.dataset.status;
