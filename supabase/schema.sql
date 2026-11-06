@@ -120,3 +120,16 @@ grant execute on function public.keyword_report() to service_role;
 -- 心の不調のサイン：none（なし）／caution（つらさ・不調がうかがえる）／urgent（死にたい・消えたいなど、命に関わる表現）
 alter table public.post_insights add column if not exists distress text not null default 'none'
   check (distress in ('none', 'caution', 'urgent'));
+
+-- リードの質：希望の働き方・年代・会話への開き方（AIの読み取り）
+alter table public.post_insights add column if not exists work_style text not null default '不明'
+  check (work_style in ('正社員', '派遣', '業務委託', 'パート・アルバイト', '副業', '不明'));
+alter table public.post_insights add column if not exists age_group text not null default '不明'
+  check (age_group in ('10代', '20代', '30代', '40代', '50代以上', '不明'));
+alter table public.post_insights add column if not exists openness text not null default 'neutral'
+  check (openness in ('open', 'neutral', 'closed'));
+-- 投稿者のプロフィール（必要なときだけ取得：1人1クレジット）
+alter table public.authors add column if not exists biography text;
+alter table public.authors add column if not exists bio_links jsonb;
+alter table public.authors add column if not exists follower_count int;
+alter table public.authors add column if not exists profile_checked_at timestamptz;

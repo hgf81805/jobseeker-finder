@@ -16,7 +16,7 @@ export default async (req) => {
       const PER_PAGE = 50;
       const page = Math.max(1, parseInt(new URL(req.url).searchParams.get("page"), 10) || 1);
       const { data, total } = await rest(
-        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,authors(full_name)&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}`,
+        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,authors(full_name,biography,bio_links,follower_count,profile_checked_at)&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}`,
         { withCount: true });
       return json(200, { items: data || [], total, page, perPage: PER_PAGE });
     }

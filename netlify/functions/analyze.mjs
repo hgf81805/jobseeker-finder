@@ -17,7 +17,7 @@ export default async (req) => {
   const insights = {};
   if (dbEnabled()) {
     try {
-      const rows = await rest(`post_insights?select=code,is_seeker,stage,job,area,worries,summary,distress&code=in.${encodeURIComponent(inList(posts.map(p => p.code)))}`);
+      const rows = await rest(`post_insights?select=code,is_seeker,stage,job,area,worries,summary,distress,work_style,age_group,openness&code=in.${encodeURIComponent(inList(posts.map(p => p.code)))}`);
       for (const r of rows || []) insights[r.code] = r;
     } catch (e) {}
   }

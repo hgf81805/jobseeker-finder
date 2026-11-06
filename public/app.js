@@ -144,7 +144,7 @@ function render(shown, excluded, stats) {
   $("summary").hidden = false;
 
   $("results").innerHTML = shown.length ? shown.map(({ post, user, verified }) => `
-    <article class="card" data-code="${esc(post.code)}">
+    <article class="card" data-code="${esc(post.code)}" data-username="${esc(user && user.username || "")}" data-time="${post.post_timestamp || 0}">
       <div class="head">
         <span class="who">@${esc(user && user.username)}${user && user.full_name ? `<small>${esc(user.full_name)}</small>` : ""}</span>
         <span class="when">${fmtTime(post.post_timestamp)} 投稿</span>
@@ -156,7 +156,7 @@ function render(shown, excluded, stats) {
           <span>いいね <strong>${post.like_count ?? 0}</strong></span>
           ${post.impression_count != null ? `<span>閲覧 <strong>${post.impression_count}</strong></span>` : ""}
         </span>
-        <span>${verified ? `<span class="pill">表示確認済</span> ` : `<button type="button" class="check-live">削除を確認（3クレジット）</button>`}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
+        <span>${verified ? `<span class="pill">表示確認済</span> ` : `<button type="button" class="check-live">削除を確認（3クレジット）</button>`}${user && user.username ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
         <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
@@ -291,11 +291,12 @@ async function loadList() {
     renderPager(total || 0, perPage || 50);
     st.hidden = true;
     $("list").innerHTML = items.length ? items.map(c => `
-      <article class="card${["skip", "vendor"].includes(c.status) ? " done" : ""}" data-code="${esc(c.code)}">
+      <article class="card${["skip", "vendor"].includes(c.status) ? " done" : ""}" data-code="${esc(c.code)}" data-username="${esc(c.username || "")}" data-time="${c.posted_at ? Date.parse(c.posted_at) / 1000 : 0}">
         <div class="head">
           <span class="who">@${esc(c.username || "—")}${c.authors && c.authors.full_name ? `<small>${esc(c.authors.full_name)}</small>` : ""}</span>
           <span class="when">${c.posted_at ? fmtTime(Date.parse(c.posted_at) / 1000) + " 投稿" : ""}</span>
         </div>
+        ${c.authors && c.authors.profile_checked_at ? profileHtml(c.authors) : ""}
         <p>${esc(c.caption)}</p>
         <div class="cand-meta">
           <span class="actions" data-code="${esc(c.code)}">
@@ -303,6 +304,7 @@ async function loadList() {
             <button type="button" class="act" data-set="vendor" aria-pressed="${c.status === "vendor"}">業者</button>
           </span>
           <span>見つけた日 ${fmtTime(Date.parse(c.found_at) / 1000)}</span>
+          ${c.username && !(c.authors && c.authors.profile_checked_at) ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}
           <a href="${esc(threadsUrl({ code: c.code, url: c.url }, c.username ? { username: c.username } : null))}" target="_blank" rel="noopener">Threadsで開く</a>
           <span class="saved" hidden>保存しました</span>
         </div>
@@ -431,7 +433,7 @@ async function attachInsights(containerId, filterId, statusId, posts) {
     const div = document.createElement("div");
     div.className = "insight loading";
     div.textContent = "AIが読み取り中…";
-    card.querySelector("p").before(div); // 本文の上に置く
+    (card.querySelector(".profile") || card.querySelector("p")).before(div); // 本文の上に置く
   });
   let res = { insights: {} };
   const need = posts.filter(p => !insightCache[p.code]);
@@ -447,6 +449,8 @@ async function attachInsights(containerId, filterId, statusId, posts) {
     card.dataset.stage = ins.stage; card.dataset.job = ins.job; card.dataset.seeker = String(ins.is_seeker);
     card.dataset.worries = (ins.worries || []).join("|");
     card.dataset.distress = ins.distress || "none";
+    card.dataset.score = String(leadScore(ins));
+    card.classList.toggle("low-fit", !isSupported(ins) || ins.openness === "closed" || !ins.is_seeker);
     card.classList.toggle("has-distress", card.dataset.distress !== "none");
     div.className = "insight";
     div.innerHTML = `
@@ -457,6 +461,10 @@ async function attachInsights(containerId, filterId, statusId, posts) {
         ${ins.stage !== "不明" ? `<span class="ins-chip stage-${esc(ins.stage)}">${esc(ins.stage)}</span>` : ""}
         ${ins.job !== "不明" ? `<span class="ins-chip">${esc(ins.job)}</span>` : ""}
         ${ins.area !== "不明" ? `<span class="ins-chip">${esc(ins.area)}</span>` : ""}
+        ${ins.openness === "open" ? `<span class="ins-chip open">反応を求めている</span>` : ""}
+        ${ins.openness === "closed" ? `<span class="ins-chip closed">声かけを嫌がっている</span>` : ""}
+        ${ins.work_style && ins.work_style !== "不明" ? `<span class="ins-chip${SUPPORTED_WORK.includes(ins.work_style) ? "" : " unfit"}">${esc(ins.work_style)}希望${SUPPORTED_WORK.includes(ins.work_style) ? "" : "（支援の対象外）"}</span>` : ""}
+        ${ins.age_group && ins.age_group !== "不明" ? `<span class="ins-chip">${esc(ins.age_group)}</span>` : ""}
         ${(ins.worries || []).map(w => `<span class="ins-chip worry">${esc(w)}</span>`).join("")}
       </div>
       ${ins.summary ? `<div class="ins-sum">${esc(ins.summary)}</div>` : ""}`;
@@ -501,6 +509,13 @@ function applyInsightFilter(containerId, filterId) {
     if (!hide) shownCount++;
   });
   bar.querySelector(".f-count").textContent = `${shownCount} ／ ${total}件を表示`;
+  // 並び順：おすすめ順は点数の高い順（同点は新しい順）、そうでなければ投稿の新しい順
+  const box = $(containerId);
+  const cards = [...box.querySelectorAll(".card[data-code]")];
+  const byTime = (a, b) => Number(b.dataset.time || 0) - Number(a.dataset.time || 0);
+  const sortBy = bar.querySelector(".f-sort").value;
+  cards.sort(sortBy === "score" ? (a, b) => Number(b.dataset.score || 0) - Number(a.dataset.score || 0) || byTime(a, b) : byTime);
+  cards.forEach(c => box.appendChild(c));
 }
 
 // 候補一覧のページ送り（50件ずつ）
@@ -569,3 +584,66 @@ function distressNote(level) {
   }
   return "";
 }
+
+// 支援の対象：雇用形態は正社員・派遣・業務委託（地域は全国、年代・職種は問わない）
+const SUPPORTED_WORK = ["正社員", "派遣", "業務委託"];
+const isSupported = ins => !ins.work_style || ins.work_style === "不明" || SUPPORTED_WORK.includes(ins.work_style);
+
+// おすすめ順の点数：支援の対象外・声かけを嫌がる・本人でない・心の不調は下げ、反応を求めている・動き出している人を上げる
+function leadScore(ins) {
+  let s = 0;
+  if (!ins.is_seeker) s -= 100;
+  if (!isSupported(ins)) s -= 60;
+  if (ins.openness === "closed") s -= 40;
+  if (ins.distress && ins.distress !== "none") s -= 30;
+  if (ins.openness === "open") s += 20;
+  if (ins.stage === "活動中" || ins.stage === "内定・退職決定") s += 15;
+  else if (ins.stage === "考え中") s += 5;
+  if (SUPPORTED_WORK.includes(ins.work_style)) s += 10;
+  return s;
+}
+
+// プロフィール（自己紹介・リンク・フォロワー数）。Instagram のリンクは目立たせる
+function profileHtml(p) {
+  const urls = new Set();
+  const collect = v => {
+    if (!v) return;
+    if (typeof v === "string") { (v.match(/https?:\/\/[^\s"'<>]+/g) || []).forEach(u => urls.add(u)); return; }
+    if (Array.isArray(v)) { v.forEach(collect); return; }
+    if (typeof v === "object") Object.values(v).forEach(collect);
+  };
+  collect(p.bio_links);
+  collect(p.biography);
+  const igHandle = (String(p.biography || "").match(/(?:instagram|インスタ|insta|IG)\s*[:：]?\s*@([A-Za-z0-9._]{2,30})/i) || [])[1];
+  if (igHandle) urls.add(`https://www.instagram.com/${igHandle}/`);
+  const links = [...urls].map(u => {
+    const ig = /instagram\.com/i.test(u);
+    return `<a href="${esc(u)}" target="_blank" rel="noopener" class="${ig ? "ig" : ""}">${ig ? "Instagram：" : ""}${esc(u.replace(/^https?:\/\//, "").slice(0, 60))}</a>`;
+  }).join("");
+  return `<div class="profile">
+    <div><b>プロフィール</b>${p.follower_count != null ? `　フォロワー ${Number(p.follower_count).toLocaleString()}` : ""}${urls.size ? "" : "　ほかの連絡先：なし"}</div>
+    ${p.biography ? `<div class="bio">${esc(String(p.biography).slice(0, 240))}</div>` : `<div class="bio">（自己紹介なし）</div>`}
+    ${links ? `<div class="links">${links}</div>` : ""}
+  </div>`;
+}
+
+// 「プロフィール」ボタン：保存済みならクレジットを使わず、無ければ1クレジットで取る
+async function onProfileClick(ev) {
+  const btn = ev.target.closest(".check-profile");
+  if (!btn) return;
+  const card = btn.closest(".card");
+  btn.disabled = true; btn.textContent = "取得中…";
+  try {
+    const { profile } = await api("/api/profile", { username: card.dataset.username });
+    const old = card.querySelector(".profile");
+    if (old) old.remove();
+    card.querySelector("p").insertAdjacentHTML("beforebegin", profileHtml(profile));
+    btn.remove();
+    refreshUsage();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "プロフィール（1クレジット）";
+    alertInline(btn.parentElement, e.status === 429 ? "今日の上限に達しました" : "取得できませんでした");
+  }
+}
+$("results").addEventListener("click", onProfileClick);
+$("list").addEventListener("click", onProfileClick);

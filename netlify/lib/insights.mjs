@@ -4,6 +4,9 @@ import Anthropic from "@anthropic-ai/sdk";
 export const MODEL = "claude-opus-5-5";
 export const STAGES = ["考え中", "活動中", "内定・退職決定", "不明"];
 export const DISTRESS = ["none", "caution", "urgent"];
+export const WORK_STYLES = ["正社員", "派遣", "業務委託", "パート・アルバイト", "副業", "不明"];
+export const AGE_GROUPS = ["10代", "20代", "30代", "40代", "50代以上", "不明"];
+export const OPENNESS = ["open", "neutral", "closed"];
 export const WORRIES = ["給与", "残業・労働時間", "人間関係", "休日", "将来性", "仕事内容", "体調・メンタル", "家庭・育児", "年齢", "通勤・勤務地", "評価・待遇", "その他"];
 
 const SYSTEM = `あなたは人材紹介会社のリサーチ担当です。Threads の日本語の投稿を読み、投稿者について分かることだけを記録します。
@@ -13,6 +16,9 @@ const SYSTEM = `あなたは人材紹介会社のリサーチ担当です。Thre
 - area：都道府県や市区町村など、書かれている地域。書かれていなければ「不明」。
 - worries：転職を考える理由や悩みを、選択肢から当てはまるものだけ選ぶ（無ければ空）。
 - summary：投稿者の状況を40字以内で。
+- work_style：希望している働き方。正社員／派遣／業務委託（フリーランス・在宅の請負を含む）／パート・アルバイト（扶養内を含む）／副業／不明。書かれていなければ「不明」。
+- age_group：年代の手がかり（「20代」「30代になって」「新卒3年目」「子どもの就学」など）から推定できれば 10代／20代／30代／40代／50代以上。手がかりが無ければ「不明」。
+- openness：会話への開き方。「誰かいませんか」「教えてください」「〜な人いる？」「話せる人がほしい」など反応を求めていれば open。「業者がうざい」「DMしないで」など声をかけられるのを嫌がっていれば closed。どちらでもなければ neutral。
 - distress：心の不調のサイン。死にたい・消えたい・自分を傷つけたいなど命に関わる表現があれば urgent。鬱・適応障害・眠れない・涙が止まらない・限界・つらくて動けない・大切な人を亡くした悲しみなど、心身のつらさがはっきり書かれていれば caution。仕事の愚痴や疲れ、軽い落ち込みだけなら none。
 推測で埋めず、投稿に書かれていることだけを根拠にしてください。結果は必ず record_insights ツールで、渡された投稿すべてについて返してください。`;
 
@@ -36,8 +42,11 @@ const TOOL = {
             worries: { type: "array", items: { type: "string", enum: WORRIES } },
             summary: { type: "string" },
             distress: { type: "string", enum: DISTRESS },
+            work_style: { type: "string", enum: WORK_STYLES },
+            age_group: { type: "string", enum: AGE_GROUPS },
+            openness: { type: "string", enum: OPENNESS },
           },
-          required: ["code", "is_seeker", "stage", "job", "area", "worries", "summary", "distress"],
+          required: ["code", "is_seeker", "stage", "job", "area", "worries", "summary", "distress", "work_style", "age_group", "openness"],
           additionalProperties: false,
         },
       },
@@ -84,6 +93,9 @@ export async function analyzePosts(posts) {
       worries: (Array.isArray(r.worries) ? r.worries : []).filter(w => WORRIES.includes(w)),
       summary: String(r.summary || "").slice(0, 80),
       distress: DISTRESS.includes(r.distress) ? r.distress : "none",
+      work_style: WORK_STYLES.includes(r.work_style) ? r.work_style : "不明",
+      age_group: AGE_GROUPS.includes(r.age_group) ? r.age_group : "不明",
+      openness: OPENNESS.includes(r.openness) ? r.openness : "neutral",
       model: response.model || MODEL,
     }));
 }
