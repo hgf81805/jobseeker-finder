@@ -451,7 +451,7 @@ async function attachInsights(containerId, filterId, statusId, posts) {
       </div>
       ${ins.summary ? `<div class="ins-sum">${esc(ins.summary)}</div>` : ""}`;
   });
-  if (res.message) { st.className = "status warn"; st.textContent = res.message; st.hidden = false; }
+  if (res.message) { st.className = res.enabled === false ? "status info" : "status warn"; st.textContent = res.message; st.hidden = false; }
   const got = posts.map(p => insightCache[p.code]).filter(Boolean);
   if (!got.length) return;
   // 絞り込みの選択肢を、読み取れた内容から作る

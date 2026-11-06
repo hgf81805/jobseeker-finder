@@ -23,7 +23,8 @@ export default async (req) => {
   }
   const missing = posts.filter(p => !insights[p.code] && p.caption);
   if (body.cachedOnly || !missing.length) return json(200, { insights, enabled: aiEnabled() });
-  if (!aiEnabled()) return json(200, { insights, enabled: false, message: "AIの読み取りを使うには、Netlify の環境変数 ANTHROPIC_API_KEY を設定してください。" });
+  // APIキーが無いときは、Claude Code が定期的に読み取って保存した結果だけを返す
+  if (!aiEnabled()) return json(200, { insights, enabled: false, pending: missing.length, message: `AIの読み取りは自動で行われます（毎日6時〜翌2時、10分ごと）。まだの${missing.length}件は、あとで付きます。` });
 
   try {
     // 10件ずつまとめて読み取る
