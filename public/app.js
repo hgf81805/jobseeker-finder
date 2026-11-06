@@ -425,7 +425,7 @@ async function attachInsights(containerId, filterId, statusId, posts) {
     const div = document.createElement("div");
     div.className = "insight loading";
     div.textContent = "AIが読み取り中…";
-    card.querySelector("p").after(div);
+    card.querySelector("p").before(div); // 本文の上に置く
   });
   let res = { insights: {} };
   const need = posts.filter(p => !insightCache[p.code]);
