@@ -16,7 +16,7 @@ export default async (req) => {
       const PER_PAGE = 50;
       const page = Math.max(1, parseInt(new URL(req.url).searchParams.get("page"), 10) || 1);
       const { data, total } = await rest(
-        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,authors(full_name,biography,bio_links,follower_count,profile_checked_at)&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}`,
+        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,reply_count,like_count,authors(full_name,biography,bio_links,follower_count,profile_checked_at)&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}`,
         { withCount: true });
       return json(200, { items: data || [], total, page, perPage: PER_PAGE });
     }
@@ -77,6 +77,8 @@ export default async (req) => {
           posted_at: Number.isNaN(ts) ? null : new Date(ts * 1000).toISOString(),
           username: username || (before && before.username) || null,
           status: body.status, updated_at: new Date().toISOString(),
+          ...(post.reply_count != null ? { reply_count: post.reply_count != null && Number.isFinite(Number(post.reply_count)) ? Math.max(0, Math.round(Number(post.reply_count))) : null } : {}),
+          ...(post.like_count != null ? { like_count: post.like_count != null && Number.isFinite(Number(post.like_count)) ? Math.max(0, Math.round(Number(post.like_count))) : null } : {}),
         }],
       });
       const who = (row && row.username) || null;

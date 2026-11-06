@@ -206,6 +206,7 @@ function saveSearch(f, shown, excluded, skipList, stats) {
     search: { keywords: f.keywords, days: f.days, maxReplies: f.maxReplies, fetched: stats.fetched, shown: shown.length, excluded: excluded.length, credits: stats.credits },
     items: shown.map(({ post, user }) => ({
       code: post.code, url: post.url, caption: post.caption, posted_at: post.post_timestamp,
+      reply_count: post.reply_count, like_count: post.like_count,
       username: user && user.username, full_name: user && user.full_name
     })),
     skipped: skipList
@@ -248,7 +249,7 @@ $("exList").addEventListener("click", async ev => {
   try {
     await api("/api/candidates", {
       status: next,
-      post: { code: post.code, url: threadsUrl(post, user), caption: post.caption, posted_at: post.post_timestamp, username: user && user.username, full_name: user && user.full_name }
+      post: { code: post.code, url: threadsUrl(post, user), caption: post.caption, posted_at: post.post_timestamp, username: user && user.username, full_name: user && user.full_name, reply_count: post.reply_count, like_count: post.like_count }
     });
     box.querySelectorAll(".act").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === next)));
   } catch (e) {
@@ -303,6 +304,7 @@ async function loadList() {
             <button type="button" class="act" data-set="skip" aria-pressed="${c.status === "skip"}">対象外</button>
             <button type="button" class="act" data-set="vendor" aria-pressed="${c.status === "vendor"}">業者</button>
           </span>
+          <span class="metrics">取得時　コメント <strong>${c.reply_count ?? "—"}</strong>　いいね <strong>${c.like_count ?? "—"}</strong></span>
           <span>見つけた日 ${fmtTime(Date.parse(c.found_at) / 1000)}</span>
           ${c.username && !(c.authors && c.authors.profile_checked_at) ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}
           <a href="${esc(threadsUrl({ code: c.code, url: c.url }, c.username ? { username: c.username } : null))}" target="_blank" rel="noopener">Threadsで開く</a>

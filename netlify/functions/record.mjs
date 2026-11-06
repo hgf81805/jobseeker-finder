@@ -32,6 +32,7 @@ export default async (req) => {
           code: String(p.code), url: String(p.url), caption: p.caption ? String(p.caption).slice(0, 2000) : null,
           posted_at: p.posted_at ? new Date(int(p.posted_at) * 1000).toISOString() : null,
           username: p.username ? String(p.username) : null, search_id: row.id,
+          reply_count: p.reply_count != null && Number.isFinite(Number(p.reply_count)) ? Math.max(0, Math.round(Number(p.reply_count))) : null, like_count: p.like_count != null && Number.isFinite(Number(p.like_count)) ? Math.max(0, Math.round(Number(p.like_count))) : null,
         })),
       });
     }

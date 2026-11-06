@@ -133,3 +133,7 @@ alter table public.authors add column if not exists biography text;
 alter table public.authors add column if not exists bio_links jsonb;
 alter table public.authors add column if not exists follower_count int;
 alter table public.authors add column if not exists profile_checked_at timestamptz;
+
+-- 取得したときのコメント数・いいね数
+alter table public.candidates add column if not exists reply_count int;
+alter table public.candidates add column if not exists like_count int;
