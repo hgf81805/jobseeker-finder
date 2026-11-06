@@ -83,3 +83,36 @@ create table if not exists public.post_insights (
   at timestamptz not null default now()
 );
 alter table public.post_insights enable row level security;
+
+-- キーワードの成績表：同じキーワードの組み合わせごとに、使ったクレジットと見つかった求職者を集計する
+create or replace function public.keyword_report()
+returns table (
+  keywords text, searches bigint, credits bigint, shown bigint, excluded bigint,
+  seekers bigint, active bigint, not_seekers bigint, analyzed bigint, last_at timestamptz
+)
+language sql stable security definer set search_path = public as $$
+  with s as (
+    select id, array_to_string(keywords, ' / ') as kw, credits, shown, excluded, created_at from searches
+  ),
+  agg_s as (
+    select kw, count(*) as searches, sum(credits) as credits, sum(shown) as shown, sum(excluded) as excluded, max(created_at) as last_at
+    from s group by kw
+  ),
+  agg_c as (
+    select s.kw,
+      count(*) filter (where i.is_seeker and c.status <> 'vendor') as seekers,
+      count(*) filter (where i.is_seeker and c.status <> 'vendor' and i.stage in ('活動中', '内定・退職決定')) as active,
+      count(*) filter (where c.status = 'vendor' or i.is_seeker = false) as not_seekers,
+      count(*) filter (where i.code is not null or c.status = 'vendor') as analyzed
+    from candidates c
+    join s on s.id = c.search_id
+    left join post_insights i on i.code = c.code
+    group by s.kw
+  )
+  select a.kw, a.searches, a.credits, a.shown, a.excluded,
+    coalesce(b.seekers, 0), coalesce(b.active, 0), coalesce(b.not_seekers, 0), coalesce(b.analyzed, 0), a.last_at
+  from agg_s a left join agg_c b on b.kw = a.kw
+  order by a.last_at desc;
+$$;
+revoke execute on function public.keyword_report() from public, anon, authenticated;
+grant execute on function public.keyword_report() to service_role;

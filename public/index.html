@@ -54,6 +54,7 @@
   <nav class="tabs" aria-label="表示の切り替え">
     <button type="button" class="tab" data-view="search" aria-pressed="true">検索</button>
     <button type="button" class="tab" data-view="list" aria-pressed="false">候補一覧</button>
+    <button type="button" class="tab" data-view="kw" aria-pressed="false">キーワード成績</button>
   </nav>
 
   <div class="status warn" id="keyWarn" hidden>検索用の APIキーがサーバーにまだ設定されていません。Netlify の環境変数を設定し、再デプロイしてください（設定する名前は README に記載）。</div>
@@ -150,6 +151,20 @@
     <nav class="pager" id="pagerTop" hidden></nav>
     <section class="results" id="list" aria-live="polite"></section>
     <nav class="pager" id="pagerBottom" hidden></nav>
+  </div>
+
+  <div class="view" id="viewKw" hidden>
+    <p class="lead">キーワードごとに、使ったクレジットと見つかった求職者の数をまとめています。「本人1人あたり」が少ないほど、少ないクレジットで本人の投稿に出会えるキーワードです。行を押すと、そのキーワードで検索画面を開きます。</p>
+    <div class="status" id="kwStatus" hidden></div>
+    <div class="table-box"><table class="kw-table">
+      <thead><tr>
+        <th scope="col">キーワード</th><th scope="col" class="n">検索</th><th scope="col" class="n">クレジット</th>
+        <th scope="col" class="n">表示</th><th scope="col" class="n">本人の投稿</th><th scope="col" class="n">うち活動中以上</th>
+        <th scope="col" class="n">本人率</th><th scope="col" class="n">本人1人あたり</th><th scope="col">最終検索</th>
+      </tr></thead>
+      <tbody id="kwBody"></tbody>
+    </table></div>
+    <p class="hint-kw">本人の投稿・本人率は、AIの読み取りが済んだ投稿で数えています（業者の印を付けた投稿は本人に数えません）。読み取り待ちがあると、数字が後から変わります。</p>
   </div>
 </main>
 

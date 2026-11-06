@@ -267,7 +267,9 @@ document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () =>
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-pressed", String(x === t)));
   $("viewSearch").hidden = t.dataset.view !== "search";
   $("viewList").hidden = t.dataset.view !== "list";
+  $("viewKw").hidden = t.dataset.view !== "kw";
   if (t.dataset.view === "list") loadList();
+  if (t.dataset.view === "kw") loadKeywords();
 }));
 
 let listStatus = "not_vendor"; // 候補一覧の最初の絞り込みは「業者以外」
@@ -513,3 +515,40 @@ function renderPager(total, perPage) {
   loadList();
   $("viewList").scrollIntoView({ behavior: "smooth", block: "start" });
 }));
+
+// キーワードの成績表
+async function loadKeywords() {
+  const st = $("kwStatus");
+  if (!hasDb) { st.className = "status warn"; st.textContent = "データベースが設定されていないため、成績表は使えません。"; st.hidden = false; return; }
+  st.className = "status info"; st.textContent = "読み込み中…"; st.hidden = false;
+  try {
+    const { rows } = await api("/api/keywords");
+    st.hidden = true;
+    const per = r => (Number(r.seekers) > 0 ? Number(r.credits) / Number(r.seekers) : null);
+    rows.sort((a, b) => (per(a) ?? Infinity) - (per(b) ?? Infinity) || Number(b.searches) - Number(a.searches));
+    const vals = rows.map(per).filter(v => v != null);
+    const best = vals.length ? Math.min(...vals) : null, worst = vals.length > 1 ? Math.max(...vals) : null;
+    $("kwBody").innerHTML = rows.length ? rows.map(r => {
+      const p = per(r);
+      const rate = Number(r.analyzed) > 0 ? Math.round(Number(r.seekers) / Number(r.analyzed) * 100) + "%" : "—";
+      const waiting = Number(r.shown) - Number(r.analyzed);
+      const cls = p != null && p === best ? "best" : p != null && p === worst ? "worst" : "";
+      return `<tr data-kw="${esc(r.keywords)}" tabindex="0">
+        <td>${esc(r.keywords)}${waiting > 0 ? `<span class="pending">読み取り待ち${waiting}件</span>` : ""}</td>
+        <td class="n">${r.searches}</td><td class="n">${Number(r.credits).toLocaleString()}</td>
+        <td class="n">${r.shown}</td><td class="n">${r.seekers}</td><td class="n">${r.active}</td>
+        <td class="n">${rate}</td><td class="n ${cls}">${p == null ? "—" : Math.round(p).toLocaleString()}</td>
+        <td>${r.last_at ? fmtTime(Date.parse(r.last_at) / 1000) : ""}</td></tr>`;
+    }).join("") : `<tr><td colspan="9">まだ検索の記録がありません。</td></tr>`;
+  } catch (e) {
+    st.className = "status bad"; st.textContent = e.message || "読み込めませんでした。"; st.hidden = false;
+  }
+}
+// 行を押すと、そのキーワードで検索画面を開く
+function openKeyword(tr) {
+  $("q").value = tr.dataset.kw.split(" / ").join(" ");
+  document.querySelector('.tab[data-view="search"]').click();
+  $("q").focus();
+}
+$("kwBody").addEventListener("click", ev => { const tr = ev.target.closest("tr[data-kw]"); if (tr) openKeyword(tr); });
+$("kwBody").addEventListener("keydown", ev => { const tr = ev.target.closest("tr[data-kw]"); if (tr && ev.key === "Enter") openKeyword(tr); });
