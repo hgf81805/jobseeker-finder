@@ -562,7 +562,7 @@ $("kwBody").addEventListener("keydown", ev => { const tr = ev.target.closest("tr
 // 心の不調のサインがある投稿への接し方の案内（売り込みをしないための注意書き）
 function distressNote(level) {
   if (level === "urgent") {
-    return `<div class="distress-note"><b>命に関わる表現があります。</b>転職や仕事の話はせず、声をかける場合も売り込みは控えてください。必要に応じて、公的な相談窓口（<a href="https://www.mhlw.go.jp/mamorouyokokoro/" target="_blank" rel="noopener">厚生労働省「まもろうよ こころ」</a>）を紹介してください。</div>`;
+    return `<div class="distress-note"><b>命に関わる表現があります。</b>転職や仕事の話はしないでください。</div>`;
   }
   if (level === "caution") {
     return `<div class="distress-note"><b>心身のつらさがうかがえます。</b>転職の売り込みは控え、声をかけるなら相手の状況を気づかう一言にとどめてください。</div>`;
