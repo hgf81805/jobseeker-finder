@@ -30,11 +30,12 @@ export async function setDailyLimit(n) {
   });
 }
 
-export async function rest(path, { method = "GET", body, prefer } = {}) {
+export async function rest(path, { method = "GET", body, prefer, withCount = false } = {}) {
   // 新しい形式の secret キー（sb_secret_...）は apikey ヘッダーだけで渡す。旧形式（JWT）は Authorization にも入れる
   const headers = { apikey: key(), "Content-Type": "application/json" };
   if (key().startsWith("eyJ")) headers.Authorization = `Bearer ${key()}`;
   if (prefer) headers.Prefer = prefer;
+  if (withCount) headers.Prefer = [headers.Prefer, "count=exact"].filter(Boolean).join(",");
   const r = await fetch(`${baseUrl()}/rest/v1/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   if (!r.ok) {
@@ -46,7 +47,11 @@ export async function rest(path, { method = "GET", body, prefer } = {}) {
     e.detail = `${r.status} ${detail}`.slice(0, 200);
     throw e;
   }
-  return text ? JSON.parse(text) : null;
+  const data = text ? JSON.parse(text) : null;
+  if (!withCount) return data;
+  // Content-Range: 0-49/123 の最後の数が全件数
+  const total = parseInt(String(r.headers.get("content-range") || "").split("/")[1], 10);
+  return { data, total: Number.isNaN(total) ? (data || []).length : total };
 }
 
 // PostgREST の in.() 用に値を引用符で囲む

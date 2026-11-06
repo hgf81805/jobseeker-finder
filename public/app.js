@@ -274,6 +274,7 @@ let listStatus = "not_vendor"; // 候補一覧の最初の絞り込みは「業�
 document.querySelectorAll("#listFilter .chip-btn").forEach(c => c.addEventListener("click", () => {
   document.querySelectorAll("#listFilter .chip-btn").forEach(x => x.setAttribute("aria-pressed", String(x === c)));
   listStatus = c.dataset.status;
+  listPage = 1;
   loadList();
 }));
 
@@ -282,7 +283,10 @@ async function loadList() {
   if (!hasDb) { st.className = "status warn"; st.textContent = "データベースが設定されていないため、候補一覧は使えません。"; st.hidden = false; $("list").innerHTML = ""; return; }
   st.className = "status info"; st.textContent = "読み込み中…"; st.hidden = false;
   try {
-    const { items } = await api("/api/candidates" + (listStatus ? `?status=${listStatus}` : ""));
+    const q = new URLSearchParams({ page: String(listPage) });
+    if (listStatus) q.set("status", listStatus);
+    const { items, total, perPage } = await api("/api/candidates?" + q);
+    renderPager(total || 0, perPage || 50);
     st.hidden = true;
     $("list").innerHTML = items.length ? items.map(c => `
       <article class="card${["skip", "vendor"].includes(c.status) ? " done" : ""}" data-code="${esc(c.code)}">
@@ -490,3 +494,22 @@ function applyInsightFilter(containerId, filterId) {
   });
   bar.querySelector(".f-count").textContent = `${shownCount} ／ ${total}件を表示`;
 }
+
+// 候補一覧のページ送り（50件ずつ）
+let listPage = 1;
+function renderPager(total, perPage) {
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  if (listPage > pages) listPage = pages;
+  const from = total ? (listPage - 1) * perPage + 1 : 0, to = Math.min(total, listPage * perPage);
+  const html = `<button type="button" data-go="-1" ${listPage <= 1 ? "disabled" : ""}>← 前の50件</button>
+    <span>${total.toLocaleString()}件中 ${from}〜${to}件（${listPage} ／ ${pages}ページ）</span>
+    <button type="button" data-go="1" ${listPage >= pages ? "disabled" : ""}>次の50件 →</button>`;
+  ["pagerTop", "pagerBottom"].forEach(id => { $(id).innerHTML = html; $(id).hidden = total <= perPage; });
+}
+["pagerTop", "pagerBottom"].forEach(id => $(id).addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-go]");
+  if (!b || b.disabled) return;
+  listPage += Number(b.dataset.go);
+  loadList();
+  $("viewList").scrollIntoView({ behavior: "smooth", block: "start" });
+}));

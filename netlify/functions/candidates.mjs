@@ -12,8 +12,13 @@ export default async (req) => {
     if (req.method === "GET") {
       const status = new URL(req.url).searchParams.get("status");
       const filter = status === "not_vendor" ? "&status=neq.vendor" : STATUSES.includes(status) ? `&status=eq.${status}` : "";
-      const rows = await rest(`candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,authors(full_name)&order=found_at.desc&limit=200${filter}`);
-      return json(200, { items: rows || [] });
+      // つぶやいた時間の新しい順に、50件ずつ
+      const PER_PAGE = 50;
+      const page = Math.max(1, parseInt(new URL(req.url).searchParams.get("page"), 10) || 1);
+      const { data, total } = await rest(
+        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,authors(full_name)&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}`,
+        { withCount: true });
+      return json(200, { items: data || [], total, page, perPage: PER_PAGE });
     }
     if (req.method === "PATCH") {
       const body = await readJson(req);
