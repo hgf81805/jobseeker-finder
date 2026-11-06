@@ -1,4 +1,7 @@
 {
   "name": "jobseeker-finder",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.1.0"
+  }
 }

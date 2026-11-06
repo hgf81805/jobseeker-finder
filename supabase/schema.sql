@@ -69,3 +69,17 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 alter table public.app_settings enable row level security;
+
+-- AIが投稿から読み取った内容（職種・地域・悩み・転職の段階）。同じ投稿は二度分析しない
+create table if not exists public.post_insights (
+  code text primary key,
+  is_seeker boolean not null,
+  stage text not null,
+  job text not null,
+  area text not null,
+  worries text[] not null default '{}',
+  summary text not null,
+  model text,
+  at timestamptz not null default now()
+);
+alter table public.post_insights enable row level security;

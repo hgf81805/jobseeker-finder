@@ -111,6 +111,15 @@
   <div class="status" id="status" hidden></div>
 
   <div class="summary" id="summary" hidden></div>
+  <div class="ins-filter" id="resultsFilter" hidden>
+    <span class="lbl">AIで絞り込み</span>
+    <select class="f-stage" aria-label="転職の段階"><option value="">段階：すべて</option></select>
+    <select class="f-job" aria-label="職種"><option value="">職種：すべて</option></select>
+    <select class="f-worry" aria-label="悩み"><option value="">悩み：すべて</option></select>
+    <label class="f-seeker-wrap"><input type="checkbox" class="f-seeker" checked> 本人の投稿だけ</label>
+    <span class="f-count"></span>
+  </div>
+  <div class="status" id="resultsAiStatus" hidden></div>
   <section class="results" id="results" aria-live="polite">
     <div class="empty">キーワードを入れて「検索」を押すと、ここに求職者の投稿が並びます。</div>
   </section>
@@ -128,6 +137,16 @@
       <button type="button" class="chip-btn" data-status="vendor" aria-pressed="false">業者</button>
     </div>
     <div class="status" id="listStatus" hidden></div>
+    <div class="ins-filter" id="listFilter2" hidden>
+    <span class="lbl">AIで絞り込み</span>
+    <select class="f-stage" aria-label="転職の段階"><option value="">段階：すべて</option></select>
+    <select class="f-job" aria-label="職種"><option value="">職種：すべて</option></select>
+    <select class="f-worry" aria-label="悩み"><option value="">悩み：すべて</option></select>
+    <label class="f-seeker-wrap"><input type="checkbox" class="f-seeker" checked> 本人の投稿だけ</label>
+    <span class="f-count"></span>
+  </div>
+  <div class="status" id="listAiStatus" hidden></div>
+
     <section class="results" id="list" aria-live="polite"></section>
   </div>
 </main>

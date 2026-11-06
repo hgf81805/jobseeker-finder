@@ -20,6 +20,7 @@ Threads の日本語投稿から、転職を考えている本人のつぶやき
 | `SUPABASE_URL` | Supabase の Project URL（任意。無ければ候補一覧と1日の上限は無効） |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase の service_role キー（サーバー専用。画面側には出さない） |
 | `DAILY_CREDIT_LIMIT` | 1日（日本時間）に使えるクレジットの上限。省略時 500 |
+| `ANTHROPIC_API_KEY` | Claude API のキー（任意。AIで「段階・職種・地域・悩み」を読み取る機能に使う） |
 
 `LOGIN_HASH` は `sha256("<LOGIN_SALT>|<小文字のメールアドレス>|<パスワード>")` の16進表記。
 
@@ -32,3 +33,4 @@ Threads の日本語投稿から、転職を考えている本人のつぶやき
 - `skipped_posts`：存在確認で外れた投稿（業者・削除済み）。次の検索では確認せずに外す
 
 同じキーワードを前に検索していれば、その1日前より後の投稿だけを取る（画面のチェックで切り替え）。
+- `post_insights`：AI（Claude）が投稿から読み取った内容。同じ投稿は二度分析しない

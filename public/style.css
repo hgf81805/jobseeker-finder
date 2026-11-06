@@ -132,6 +132,22 @@ details.adv .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
 .check-live { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 2px 10px; font-size: 12px; margin-right: 6px; }
 .check-live:hover { border-color: var(--accent); color: var(--accent); }
 .pill.gone { background: var(--bad-soft); color: var(--bad); }
+.insight { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px dashed var(--line); font-size: 13px; }
+.insight .ins-sum { color: var(--ink); }
+.ins-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ins-chip { font-size: 12px; padding: 1px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.ins-chip.stage-活動中, .ins-chip.stage-内定・退職決定 { background: var(--ok-soft); color: var(--ok); font-weight: 700; }
+.ins-chip.worry { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+.ins-chip.not-seeker { background: var(--warn-soft); color: var(--warn); font-weight: 700; }
+.insight.loading { color: var(--muted); }
+.ins-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.ins-filter[hidden] { display: none; }
+.ins-filter .lbl { color: var(--muted); font-size: 12px; }
+.ins-filter select { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.ins-filter label { display: inline-flex; gap: 6px; align-items: center; }
+.ins-filter input { accent-color: var(--accent); }
+.ins-filter .f-count { color: var(--muted); font-size: 12px; }
+.card.f-hidden { display: none; }
 .tabs, .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .tab, .chip-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 16px; font-size: 14px; }
 .chip-btn { padding: 3px 12px; font-size: 13px; }

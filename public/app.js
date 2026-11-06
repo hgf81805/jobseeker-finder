@@ -303,6 +303,7 @@ async function loadList() {
         <textarea class="cand-note" aria-label="メモ" placeholder="メモ（やり取りの内容など）">${esc(c.note || "")}</textarea>
       </article>`).join("")
       : `<div class="empty">この条件の候補はまだありません。検索すると、表示した投稿がここに入ります。</div>`;
+    attachInsights("list", "listFilter2", "listAiStatus", items.map(c => ({ code: c.code, caption: c.caption, username: c.username, full_name: c.authors && c.authors.full_name })));
   } catch (e) {
     st.className = "status bad"; st.textContent = e.message || "読み込めませんでした。"; st.hidden = false;
   }
@@ -374,6 +375,7 @@ async function runSearch(f) {
     }
     hideStatus();
     render(shown, excluded, { credits, fetched, total, since });
+    attachInsights("results", "resultsFilter", "resultsAiStatus", shown.map(({ post, user }) => ({ code: post.code, caption: post.caption, username: user && user.username, full_name: user && user.full_name })));
     saveSearch(f, shown, excluded, [], { credits, fetched });
     refreshUsage();
   } catch (e) {
@@ -411,3 +413,80 @@ $("results").addEventListener("click", async ev => {
     alertInline(btn.parentElement, e.status === 429 ? "今日の上限に達しました" : "確認できませんでした");
   }
 });
+
+// AIの読み取り：各カードに「段階・職種・地域・悩み・要約」を付け、絞り込みの帯を用意する
+const insightCache = {};
+async function attachInsights(containerId, filterId, statusId, posts) {
+  const box = $(containerId), bar = $(filterId), st = $(statusId);
+  bar.hidden = true; st.hidden = true;
+  if (!posts.length) return;
+  box.querySelectorAll(".card[data-code]").forEach(card => {
+    if (card.querySelector(".insight")) return;
+    const div = document.createElement("div");
+    div.className = "insight loading";
+    div.textContent = "AIが読み取り中…";
+    card.querySelector("p").after(div);
+  });
+  let res = { insights: {} };
+  const need = posts.filter(p => !insightCache[p.code]);
+  if (need.length) {
+    try { res = await api("/api/analyze", { posts: need }); } catch (e) { res = { insights: {}, message: "AIの読み取りに失敗しました。" }; }
+    Object.assign(insightCache, res.insights || {});
+  }
+  box.querySelectorAll(".card[data-code]").forEach(card => {
+    const ins = insightCache[card.dataset.code];
+    const div = card.querySelector(".insight");
+    if (!div) return;
+    if (!ins) { div.remove(); return; }
+    card.dataset.stage = ins.stage; card.dataset.job = ins.job; card.dataset.seeker = String(ins.is_seeker);
+    card.dataset.worries = (ins.worries || []).join("|");
+    div.className = "insight";
+    div.innerHTML = `
+      <div class="ins-chips">
+        ${ins.is_seeker ? "" : `<span class="ins-chip not-seeker">本人の投稿ではない可能性（業者・発信など）</span>`}
+        ${ins.stage !== "不明" ? `<span class="ins-chip stage-${esc(ins.stage)}">${esc(ins.stage)}</span>` : ""}
+        ${ins.job !== "不明" ? `<span class="ins-chip">${esc(ins.job)}</span>` : ""}
+        ${ins.area !== "不明" ? `<span class="ins-chip">${esc(ins.area)}</span>` : ""}
+        ${(ins.worries || []).map(w => `<span class="ins-chip worry">${esc(w)}</span>`).join("")}
+      </div>
+      ${ins.summary ? `<div class="ins-sum">${esc(ins.summary)}</div>` : ""}`;
+  });
+  if (res.message) { st.className = "status warn"; st.textContent = res.message; st.hidden = false; }
+  const got = posts.map(p => insightCache[p.code]).filter(Boolean);
+  if (!got.length) return;
+  // 絞り込みの選択肢を、読み取れた内容から作る
+  const fill = (sel, values, label) => {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${label}：すべて</option>` + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    if (values.includes(cur)) sel.value = cur;
+  };
+  const uniq = arr => [...new Set(arr)].filter(v => v && v !== "不明").sort();
+  fill(bar.querySelector(".f-stage"), ["考え中", "活動中", "内定・退職決定"].filter(v => got.some(g => g.stage === v)), "段階");
+  fill(bar.querySelector(".f-job"), uniq(got.map(g => g.job)), "職種");
+  fill(bar.querySelector(".f-worry"), uniq(got.flatMap(g => g.worries || [])), "悩み");
+  bar.hidden = false;
+  if (!bar.dataset.bound) {
+    bar.dataset.bound = "1";
+    bar.addEventListener("change", () => applyInsightFilter(containerId, filterId));
+  }
+  applyInsightFilter(containerId, filterId);
+}
+
+function applyInsightFilter(containerId, filterId) {
+  const bar = $(filterId);
+  const stage = bar.querySelector(".f-stage").value, job = bar.querySelector(".f-job").value, worry = bar.querySelector(".f-worry").value;
+  const seekerOnly = bar.querySelector(".f-seeker").checked;
+  let shownCount = 0, total = 0;
+  $(containerId).querySelectorAll(".card[data-code]").forEach(card => {
+    total++;
+    const analyzed = card.dataset.stage !== undefined;
+    const hide = analyzed && (
+      (seekerOnly && card.dataset.seeker === "false") ||
+      (stage && card.dataset.stage !== stage) ||
+      (job && card.dataset.job !== job) ||
+      (worry && !(card.dataset.worries || "").split("|").includes(worry)));
+    card.classList.toggle("f-hidden", !!hide);
+    if (!hide) shownCount++;
+  });
+  bar.querySelector(".f-count").textContent = `${shownCount} ／ ${total}件を表示`;
+}
