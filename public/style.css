@@ -140,6 +140,10 @@ details.adv .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
 .ins-chip.worry { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
 .ins-chip.not-seeker { background: var(--warn-soft); color: var(--warn); font-weight: 700; }
 .insight.loading { color: var(--muted); }
+.ins-chip.distress { background: var(--bad-soft); color: var(--bad); font-weight: 700; }
+.distress-note { font-size: 12px; line-height: 1.6; padding: 8px 10px; border-radius: 8px; background: var(--bad-soft); color: var(--ink); }
+.distress-note a { color: var(--bad); font-weight: 700; }
+.card.has-distress { border-left-color: var(--bad); }
 .ins-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
 .ins-filter[hidden] { display: none; }
 .ins-filter .lbl { color: var(--muted); font-size: 12px; }

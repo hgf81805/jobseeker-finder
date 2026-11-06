@@ -116,3 +116,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.keyword_report() from public, anon, authenticated;
 grant execute on function public.keyword_report() to service_role;
+
+-- 心の不調のサイン：none（なし）／caution（つらさ・不調がうかがえる）／urgent（死にたい・消えたいなど、命に関わる表現）
+alter table public.post_insights add column if not exists distress text not null default 'none'
+  check (distress in ('none', 'caution', 'urgent'));

@@ -446,9 +446,13 @@ async function attachInsights(containerId, filterId, statusId, posts) {
     if (!ins) { div.remove(); return; }
     card.dataset.stage = ins.stage; card.dataset.job = ins.job; card.dataset.seeker = String(ins.is_seeker);
     card.dataset.worries = (ins.worries || []).join("|");
+    card.dataset.distress = ins.distress || "none";
+    card.classList.toggle("has-distress", card.dataset.distress !== "none");
     div.className = "insight";
     div.innerHTML = `
+      ${distressNote(ins.distress)}
       <div class="ins-chips">
+        ${ins.distress && ins.distress !== "none" ? `<span class="ins-chip distress">${ins.distress === "urgent" ? "命に関わるサイン" : "心の不調のサイン"}</span>` : ""}
         ${ins.is_seeker ? "" : `<span class="ins-chip not-seeker">本人の投稿ではない可能性（業者・発信など）</span>`}
         ${ins.stage !== "不明" ? `<span class="ins-chip stage-${esc(ins.stage)}">${esc(ins.stage)}</span>` : ""}
         ${ins.job !== "不明" ? `<span class="ins-chip">${esc(ins.job)}</span>` : ""}
@@ -482,12 +486,14 @@ function applyInsightFilter(containerId, filterId) {
   const bar = $(filterId);
   const stage = bar.querySelector(".f-stage").value, job = bar.querySelector(".f-job").value, worry = bar.querySelector(".f-worry").value;
   const seekerOnly = bar.querySelector(".f-seeker").checked;
+  const hideDistress = bar.querySelector(".f-distress").checked;
   let shownCount = 0, total = 0;
   $(containerId).querySelectorAll(".card[data-code]").forEach(card => {
     total++;
     const analyzed = card.dataset.stage !== undefined;
     const hide = analyzed && (
       (seekerOnly && card.dataset.seeker === "false") ||
+      (hideDistress && card.dataset.distress && card.dataset.distress !== "none") ||
       (stage && card.dataset.stage !== stage) ||
       (job && card.dataset.job !== job) ||
       (worry && !(card.dataset.worries || "").split("|").includes(worry)));
@@ -552,3 +558,14 @@ function openKeyword(tr) {
 }
 $("kwBody").addEventListener("click", ev => { const tr = ev.target.closest("tr[data-kw]"); if (tr) openKeyword(tr); });
 $("kwBody").addEventListener("keydown", ev => { const tr = ev.target.closest("tr[data-kw]"); if (tr && ev.key === "Enter") openKeyword(tr); });
+
+// 心の不調のサインがある投稿への接し方の案内（売り込みをしないための注意書き）
+function distressNote(level) {
+  if (level === "urgent") {
+    return `<div class="distress-note"><b>命に関わる表現があります。</b>転職や仕事の話はせず、声をかける場合も売り込みは控えてください。必要に応じて、公的な相談窓口（<a href="https://www.mhlw.go.jp/mamorouyokokoro/" target="_blank" rel="noopener">厚生労働省「まもろうよ こころ」</a>）を紹介してください。</div>`;
+  }
+  if (level === "caution") {
+    return `<div class="distress-note"><b>心身のつらさがうかがえます。</b>転職の売り込みは控え、声をかけるなら相手の状況を気づかう一言にとどめてください。</div>`;
+  }
+  return "";
+}
