@@ -159,6 +159,7 @@ function render(shown, excluded, stats) {
         <span>${verified ? `<span class="pill">表示確認済</span> ` : `<button type="button" class="check-live">削除を確認（3クレジット）</button>`}${user && user.username ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
+        <button type="button" class="act" data-set="contacted" aria-pressed="false">声かけ済</button>
         <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
         <button type="button" class="act" data-set="vendor" aria-pressed="false">業者</button>
       </div>` : ""}
@@ -227,7 +228,7 @@ async function onMarkClick(ev) {
   try {
     await setStatus(box.dataset.code, next);
     box.querySelectorAll(".act").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === next)));
-    btn.closest(".card").classList.toggle("done", next !== "new");
+    btn.closest(".card").classList.toggle("done", next === "skip" || next === "vendor");
   } catch (e) {
     alertInline(box, "保存できませんでした");
   } finally { btn.disabled = false; }
@@ -301,11 +302,13 @@ async function loadList() {
         <p>${esc(c.caption)}</p>
         <div class="cand-meta">
           <span class="actions" data-code="${esc(c.code)}">
+            <button type="button" class="act" data-set="contacted" aria-pressed="${c.status === "contacted"}">声かけ済</button>
             <button type="button" class="act" data-set="skip" aria-pressed="${c.status === "skip"}">対象外</button>
             <button type="button" class="act" data-set="vendor" aria-pressed="${c.status === "vendor"}">業者</button>
           </span>
           <span class="metrics">取得時　コメント <strong>${c.reply_count ?? "—"}</strong>　いいね <strong>${c.like_count ?? "—"}</strong></span>
           <span>見つけた日 ${fmtTime(Date.parse(c.found_at) / 1000)}</span>
+          ${c.status === "contacted" && c.contacted_at ? `<span>声かけ ${fmtTime(Date.parse(c.contacted_at) / 1000)}</span>` : ""}
           ${c.username && !(c.authors && c.authors.profile_checked_at) ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}
           <a href="${esc(threadsUrl({ code: c.code, url: c.url }, c.username ? { username: c.username } : null))}" target="_blank" rel="noopener">Threadsで開く</a>
           <span class="saved" hidden>保存しました</span>
