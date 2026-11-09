@@ -440,8 +440,16 @@ async function attachInsights(containerId, filterId, statusId, posts) {
   let res = { insights: {} };
   const need = posts.filter(p => !insightCache[p.code]);
   if (need.length) {
-    try { res = await api("/api/analyze", { posts: need }); } catch (e) { res = { insights: {}, message: "AIの読み取りに失敗しました。" }; }
-    Object.assign(insightCache, res.insights || {});
+    // サーバーは一度に30件までなので、25件ずつに分けて取る（候補一覧は1ページ50件）
+    res = { insights: {} };
+    for (let i = 0; i < need.length; i += 25) {
+      try {
+        const part = await api("/api/analyze", { posts: need.slice(i, i + 25) });
+        Object.assign(res.insights, part.insights || {});
+        if (part.message) { res.message = part.message; res.enabled = part.enabled; }
+      } catch (e) { res.message = "AIの読み取りに失敗しました。"; }
+    }
+    Object.assign(insightCache, res.insights);
   }
   box.querySelectorAll(".card[data-code]").forEach(card => {
     const ins = insightCache[card.dataset.code];
