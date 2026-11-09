@@ -589,9 +589,6 @@ function distressNote(level) {
   if (level === "urgent") {
     return `<div class="distress-note"><b>命に関わる表現があります。</b>転職や仕事の話はしないでください。</div>`;
   }
-  if (level === "caution") {
-    return `<div class="distress-note"><b>心身のつらさがうかがえます。</b>転職の売り込みは控え、声をかけるなら相手の状況を気づかう一言にとどめてください。</div>`;
-  }
   return "";
 }
 
