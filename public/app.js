@@ -138,7 +138,9 @@ function render(shown, excluded, stats) {
   $("summary").innerHTML = [
     ["該当", stats.total != null ? stats.total.toLocaleString() + (stats.total >= 10000 ? "+" : "") : "—"],
     ["確認", stats.fetched], ["表示", shown.length], ["業者を除外", count("vendor")],
-    ["削除済みを除外", count("deleted")], ["件数超えを除外", count("replies")], ["使ったクレジット", stats.credits],
+    ["削除済みを除外", count("deleted")], ["件数超えを除外", count("replies")],
+    ...(stats.alreadySaved ? [["取得済みで非表示", stats.alreadySaved]] : []),
+    ["使ったクレジット", stats.credits],
     ...(stats.since ? [["取得した範囲", `${fmtTime(stats.since)} 以降`]] : [])
   ].map(([k, v]) => `<span class="s">${k}<b>${v}</b></span>`).join("");
   $("summary").hidden = false;
@@ -342,6 +344,7 @@ async function runSearch(f) {
   showStatus("info", '<span class="progress" id="prog">検索しています…</span>');
   const prog = msg => { const el = $("prog"); if (el) el.textContent = msg; };
   const excluded = [], shown = [], seen = new Set();
+  let alreadySaved = 0; // 候補一覧に取得済み（業者以外）の投稿。結果にも除外リストにも出さない
   let credits = 0, fetched = 0, total = null, since = null;
   try {
     if (hasDb && f.onlyNew) {
@@ -379,7 +382,8 @@ async function runSearch(f) {
         const st = known.codes && known.codes[it.post.code];
         const sk = known.skipped && known.skipped[it.post.code];
         const uname = it.user && it.user.username;
-        if (st) excluded.push({ it, tag: "dup", label: "登録済み", why: `候補一覧に登録済み（${STATUS_LABEL[st] || st}）` });
+        if (st === "vendor") excluded.push({ it, tag: "vendor", label: "業者", why: "候補一覧で業者に登録済み" });
+        else if (st) alreadySaved++;
         else if (sk === "deleted") excluded.push({ it, tag: "deleted", label: "削除済み", why: "前回の確認で削除済み" });
         else if (f.noVendor && (sk === "vendor" || (uname && vendorSet.has(uname)))) excluded.push({ it, tag: "vendor", label: "業者", why: sk === "vendor" ? "前回の確認で業者と判定" : "業者として登録済みの投稿者" });
         else if (shown.length < f.want) shown.push({ post: it.post, user: it.user, verified: false });
@@ -387,14 +391,14 @@ async function runSearch(f) {
       if (overReplies || items.length < PAGE_SIZE) break;
     }
     hideStatus();
-    render(shown, excluded, { credits, fetched, total, since });
+    render(shown, excluded, { credits, fetched, total, since, alreadySaved });
     attachInsights("results", "resultsFilter", "resultsAiStatus", shown.map(({ post, user }) => ({ code: post.code, caption: post.caption, username: user && user.username, full_name: user && user.full_name })));
     saveSearch(f, shown, excluded, [], { credits, fetched });
     refreshUsage();
   } catch (e) {
     if (e.status === 401) { showApp(false); return; }
     showStatus("bad", `<div><b>検索できませんでした。</b>${esc(e.message)}</div>`);
-    if (credits) render(shown, excluded, { credits, fetched, total, since });
+    if (credits) render(shown, excluded, { credits, fetched, total, since, alreadySaved });
     refreshUsage();
   }
 }
