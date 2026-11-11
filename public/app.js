@@ -161,7 +161,6 @@ function render(shown, excluded, stats) {
         <span>${verified ? `<span class="pill">表示確認済</span> ` : ""}${user && user.username ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
-        <button type="button" class="act" data-set="contacted" aria-pressed="false">声かけ済</button>
         <button type="button" class="act" data-set="skip" aria-pressed="false">対象外</button>
         <button type="button" class="act" data-set="vendor" aria-pressed="false">業者</button>
       </div>` : ""}
