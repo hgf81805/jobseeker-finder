@@ -158,7 +158,7 @@ function render(shown, excluded, stats) {
           <span>いいね <strong>${post.like_count ?? 0}</strong></span>
           ${post.impression_count != null ? `<span>閲覧 <strong>${post.impression_count}</strong></span>` : ""}
         </span>
-        <span>${verified ? `<span class="pill">表示確認済</span> ` : `<button type="button" class="check-live">削除を確認（3クレジット）</button>`}${user && user.username ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
+        <span>${verified ? `<span class="pill">表示確認済</span> ` : ""}${user && user.username ? `<button type="button" class="check-profile">プロフィール（1クレジット）</button>` : ""}<a href="${esc(threadsUrl(post, user))}" target="_blank" rel="noopener">Threadsで開く</a></span>
       </div>
       ${hasDb ? `<div class="actions" data-code="${esc(post.code)}">
         <button type="button" class="act" data-set="contacted" aria-pressed="false">声かけ済</button>
@@ -403,33 +403,6 @@ async function runSearch(f) {
   }
 }
 
-// カードの「削除を確認」：その投稿だけ存在確認（3クレジット）
-$("results").addEventListener("click", async ev => {
-  const btn = ev.target.closest(".check-live");
-  if (!btn) return;
-  const card = btn.closest(".card");
-  btn.disabled = true; btn.textContent = "確認中…";
-  try {
-    const p = await api("/api/live", { codes: [card.dataset.code] });
-    const r = (p.content || [])[0];
-    const pill = document.createElement("span");
-    if (r && r.success) {
-      pill.className = "pill"; pill.textContent = "表示確認済";
-      const strongs = card.querySelectorAll(".metrics strong");
-      if (strongs[0] && r.post) strongs[0].textContent = r.post.reply_count ?? strongs[0].textContent;
-      if (strongs[1] && r.post) strongs[1].textContent = r.post.like_count ?? strongs[1].textContent;
-    } else {
-      pill.className = "pill gone"; pill.textContent = "削除済み";
-      card.classList.add("done");
-    }
-    btn.replaceWith(pill);
-    pill.insertAdjacentText("afterend", " ");
-    refreshUsage();
-  } catch (e) {
-    btn.disabled = false; btn.textContent = "削除を確認（3クレジット）";
-    alertInline(btn.parentElement, e.status === 429 ? "今日の上限に達しました" : "確認できませんでした");
-  }
-});
 
 // AIの読み取り：各カードに「段階・職種・地域・悩み・要約」を付け、絞り込みの帯を用意する
 const insightCache = {};
