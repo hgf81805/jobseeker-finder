@@ -105,8 +105,12 @@ function updateEstimate() {
 updateEstimate();
 
 // 本文での判定は検索直後に、表示名での判定は存在確認で投稿者が分かってから行う
+// 編集できる言葉とは別に、必ず業者として扱うもの
+const ALWAYS_VENDOR = [/note\.com/i];
 function captionVendorReason(post, words) {
   const caption = post.caption || "";
+  const always = ALWAYS_VENDOR.find(re => re.test(caption));
+  if (always) return "本文に「note.com」";
   const hit = words.find(w => caption.includes(w));
   if (hit) return `本文に「${hit}」`;
   if (/[①②③④⑤⑥]/.test(caption) && /(聞きたい|どれ|教えて)/.test(caption)) return "アンケート型の集客投稿";
