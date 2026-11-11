@@ -11,7 +11,7 @@ export default async (req) => {
   try {
     if (req.method === "GET") {
       const status = new URL(req.url).searchParams.get("status");
-      const filter = status === "not_vendor" ? "&status=neq.vendor" : STATUSES.includes(status) ? `&status=eq.${status}` : "";
+      const filter = status === "not_vendor" ? "&status=not.in.(vendor,contacted,skip)" : STATUSES.includes(status) ? `&status=eq.${status}` : "";
       // つぶやいた時間の新しい順に、50件ずつ
       const PER_PAGE = 50;
       const page = Math.max(1, parseInt(new URL(req.url).searchParams.get("page"), 10) || 1);
