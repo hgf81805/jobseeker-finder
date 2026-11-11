@@ -188,3 +188,20 @@ revoke execute on function public.access_purge() from public, anon, authenticate
 revoke execute on function public.access_summary() from public, anon, authenticated;
 grant execute on function public.access_purge() to service_role;
 grant execute on function public.access_summary() to service_role;
+
+-- 自分で作るラベル（候補に何個でも付けられる）
+create table if not exists public.labels (
+  id bigint generated always as identity primary key,
+  name text not null unique check (char_length(name) between 1 and 30),
+  color text not null default 'gray',
+  created_at timestamptz not null default now()
+);
+create table if not exists public.candidate_labels (
+  code text not null references public.candidates(code) on delete cascade,
+  label_id bigint not null references public.labels(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (code, label_id)
+);
+create index if not exists candidate_labels_label_idx on public.candidate_labels (label_id);
+alter table public.labels enable row level security;
+alter table public.candidate_labels enable row level security;

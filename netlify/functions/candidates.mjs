@@ -13,14 +13,20 @@ export default async (req, context) => {
     await logAccess(req, context, req.method === "GET" ? "list" : "mark");
     if (req.method === "GET") {
       const status = new URL(req.url).searchParams.get("status");
+      // ラベルで絞り込むときは、付いているラベルの表示（lbl）とは別に絞り込み用（flt）を内部結合する
+      const labelId = parseInt(new URL(req.url).searchParams.get("label"), 10);
+      const byLabel = Number.isInteger(labelId) && labelId > 0;
+      const labelSel = `,lbl:candidate_labels(label_id)${byLabel ? ",flt:candidate_labels!inner(label_id)" : ""}`;
+      const labelFilter = byLabel ? `&flt.label_id=eq.${labelId}` : "";
       const filter = status === "not_vendor" ? "&status=not.in.(vendor,contacted,skip)" : STATUSES.includes(status) ? `&status=eq.${status}` : "";
       // つぶやいた時間の新しい順に、50件ずつ
       const PER_PAGE = 50;
       const page = Math.max(1, parseInt(new URL(req.url).searchParams.get("page"), 10) || 1);
       const { data, total } = await rest(
-        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,reply_count,like_count,authors(full_name,biography,bio_links,follower_count,profile_checked_at)&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}`,
+        `candidates?select=code,url,caption,posted_at,username,found_at,status,contacted_at,note,reply_count,like_count,authors(full_name,biography,bio_links,follower_count,profile_checked_at)${labelSel}&order=posted_at.desc.nullslast,found_at.desc&limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}${filter}${labelFilter}`,
         { withCount: true });
-      return json(200, { items: data || [], total, page, perPage: PER_PAGE });
+      const items = (data || []).map(({ lbl, flt, ...c }) => ({ ...c, labels: (lbl || []).map(l => l.label_id) }));
+      return json(200, { items, total, page, perPage: PER_PAGE });
     }
     if (req.method === "PATCH") {
       const body = await readJson(req);

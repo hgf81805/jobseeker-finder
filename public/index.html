@@ -55,6 +55,7 @@
     <button type="button" class="tab" data-view="search" aria-pressed="true">検索</button>
     <button type="button" class="tab" data-view="list" aria-pressed="false">候補一覧</button>
     <button type="button" class="tab" data-view="kw" aria-pressed="false">キーワード成績</button>
+    <button type="button" class="tab" data-view="labels" aria-pressed="false">ラベル</button>
   </nav>
 
   <div class="status warn" id="keyWarn" hidden>検索用の APIキーがサーバーにまだ設定されていません。Netlify の環境変数を設定し、再デプロイしてください（設定する名前は README に記載）。</div>
@@ -139,6 +140,7 @@
       <button type="button" class="chip-btn" data-status="contacted" aria-pressed="false">声かけ済</button>
       <button type="button" class="chip-btn" data-status="skip" aria-pressed="false">対象外</button>
       <button type="button" class="chip-btn" data-status="vendor" aria-pressed="false">業者</button>
+      <select id="listLabel" class="label-select" aria-label="ラベルで絞り込み"><option value="">ラベル：すべて</option></select>
     </div>
     <div class="status" id="listStatus" hidden></div>
     <div class="ins-filter" id="listFilter2" hidden>
@@ -170,6 +172,16 @@
       <tbody id="kwBody"></tbody>
     </table></div>
     <p class="hint-kw">本人の投稿・本人率は、AIの読み取りが済んだ投稿で数えています（業者の印を付けた投稿は本人に数えません）。読み取り待ちがあると、数字が後から変わります。</p>
+  </div>
+  <div class="view" id="viewLabels" hidden>
+    <p class="lead">自分でラベルを作り、候補一覧の投稿に付けられます。1つの投稿に何個でも付けられます。ラベルを押すと、そのラベルが付いた候補を一覧で開きます。</p>
+    <form class="label-new" id="labelForm" novalidate>
+      <input id="labelName" type="text" maxlength="30" placeholder="ラベルの名前（例：20代・営業、DM送信予定）" aria-label="ラベルの名前" autocomplete="off">
+      <div class="swatches" id="labelColors" role="radiogroup" aria-label="色"></div>
+      <button class="btn-primary" type="submit">ラベルを作る</button>
+    </form>
+    <div class="status" id="labelStatus" hidden></div>
+    <ul class="label-list" id="labelList"></ul>
   </div>
 </main>
 

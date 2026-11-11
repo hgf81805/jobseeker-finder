@@ -275,7 +275,9 @@ document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () =>
   $("viewSearch").hidden = t.dataset.view !== "search";
   $("viewList").hidden = t.dataset.view !== "list";
   $("viewKw").hidden = t.dataset.view !== "kw";
+  $("viewLabels").hidden = t.dataset.view !== "labels";
   if (t.dataset.view === "list") loadList();
+  if (t.dataset.view === "labels") loadLabels();
   if (t.dataset.view === "kw") loadKeywords();
 }));
 
@@ -294,7 +296,8 @@ async function loadList() {
   try {
     const q = new URLSearchParams({ page: String(listPage) });
     if (listStatus) q.set("status", listStatus);
-    const { items, total, perPage } = await api("/api/candidates?" + q);
+    if (listLabel) q.set("label", listLabel);
+    const [{ items, total, perPage }] = await Promise.all([api("/api/candidates?" + q), labelsLoaded ? null : loadLabelsData()]);
     renderPager(total || 0, perPage || 50);
     st.hidden = true;
     $("list").innerHTML = items.length ? items.map(c => `
@@ -305,6 +308,7 @@ async function loadList() {
         </div>
         ${c.authors && c.authors.profile_checked_at ? profileHtml(c.authors) : ""}
         <p>${esc(c.caption)}</p>
+        <div class="card-labels" data-labels="${esc((c.labels || []).join(","))}">${cardLabelsHtml(c.labels || [])}</div>
         <div class="cand-meta">
           <span class="actions" data-code="${esc(c.code)}">
             <button type="button" class="act" data-set="contacted" aria-pressed="${c.status === "contacted"}">声かけ済</button>
@@ -337,6 +341,10 @@ async function saveCandidate(card, patch) {
 $("list").addEventListener("change", ev => {
   const card = ev.target.closest(".card");
   if (!card) return;
+  if (ev.target.classList.contains("lbl-toggle")) {
+    toggleCardLabel(card, Number(ev.target.value), ev.target.checked, ev.target);
+    return;
+  }
   if (ev.target.classList.contains("cand-note")) {
     saveCandidate(card, { note: ev.target.value });
   }
@@ -637,3 +645,149 @@ async function onProfileClick(ev) {
 }
 $("results").addEventListener("click", onProfileClick);
 $("list").addEventListener("click", onProfileClick);
+
+// ラベル：自分で作り、候補に付ける
+const LABEL_COLORS = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"];
+const COLOR_NAME = { gray: "グレー", red: "赤", orange: "オレンジ", yellow: "黄", green: "緑", teal: "青緑", blue: "青", purple: "紫", pink: "ピンク" };
+let labels = [];
+let labelsLoaded = false;
+let listLabel = "";
+let newLabelColor = "blue";
+const labelById = id => labels.find(l => l.id === id);
+const chipHtml = l => `<span class="label-chip lc-${esc(l.color)}">${esc(l.name)}</span>`;
+
+async function loadLabelsData() {
+  const data = await api("/api/labels");
+  labels = data.labels || [];
+  labelsLoaded = true;
+  renderLabelSelect();
+  return labels;
+}
+
+function renderLabelSelect() {
+  const sel = $("listLabel");
+  if (listLabel && !labelById(Number(listLabel))) listLabel = "";
+  sel.innerHTML = `<option value="">ラベル：すべて</option>` + labels.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+  sel.value = listLabel;
+}
+$("listLabel").addEventListener("change", ev => { listLabel = ev.target.value; listPage = 1; loadList(); });
+
+function cardLabelsHtml(ids) {
+  const on = new Set(ids);
+  const chips = ids.map(labelById).filter(Boolean).map(chipHtml).join("");
+  const menu = labels.length
+    ? labels.map(l => `<label><input type="checkbox" class="lbl-toggle" value="${l.id}" ${on.has(l.id) ? "checked" : ""}>${chipHtml(l)}</label>`).join("")
+    : `<span class="none">ラベルはまだありません。「ラベル」タブで作れます。</span>`;
+  return `${chips}<details><summary>＋ ラベル</summary><div class="menu">${menu}</div></details>`;
+}
+
+async function toggleCardLabel(card, id, on, input) {
+  const box = card.querySelector(".card-labels");
+  const ids = (box.dataset.labels ? box.dataset.labels.split(",").map(Number) : []).filter(x => x !== id);
+  if (on) ids.push(id);
+  input.disabled = true;
+  try {
+    await api("/api/labels", { action: "assign", code: card.dataset.code, label_id: id, on });
+    box.dataset.labels = ids.join(",");
+    const l = labelById(id);
+    if (l) l.count = Math.max(0, (l.count || 0) + (on ? 1 : -1));
+    const wasOpen = box.querySelector("details").open;
+    box.innerHTML = cardLabelsHtml(ids);
+    box.querySelector("details").open = wasOpen;
+  } catch (e) {
+    input.checked = !on; input.disabled = false;
+    alertInline(card.querySelector(".cand-meta"), "ラベルを保存できませんでした");
+  }
+}
+// 開いたラベルのメニューは、外を押したら閉じる
+document.addEventListener("click", ev => {
+  document.querySelectorAll(".card-labels details[open]").forEach(d => { if (!d.contains(ev.target)) d.open = false; });
+});
+
+// ラベルタブ
+function renderSwatches() {
+  $("labelColors").innerHTML = LABEL_COLORS.map(c => `<button type="button" class="swatch lc-${c}" role="radio" data-color="${c}" aria-checked="${c === newLabelColor}" aria-label="${COLOR_NAME[c]}" title="${COLOR_NAME[c]}"></button>`).join("");
+}
+$("labelColors").addEventListener("click", ev => {
+  const b = ev.target.closest(".swatch");
+  if (!b) return;
+  newLabelColor = b.dataset.color;
+  renderSwatches();
+});
+renderSwatches();
+
+function labelStatus(cls, text) { const st = $("labelStatus"); st.className = "status " + cls; st.textContent = text; st.hidden = !text; }
+
+async function loadLabels() {
+  if (!hasDb) { labelStatus("warn", "データベースが設定されていないため、ラベルは使えません。"); return; }
+  labelStatus("info", "読み込み中…");
+  try { await loadLabelsData(); labelStatus("", ""); renderLabelList(); }
+  catch (e) { labelStatus("bad", e.message || "読み込めませんでした。"); }
+}
+
+function renderLabelList() {
+  $("labelList").innerHTML = labels.length ? labels.map(l => `
+    <li data-id="${l.id}">
+      <button type="button" class="open-label label-chip lc-${esc(l.color)}" title="このラベルの候補を一覧で開く">${esc(l.name)}</button>
+      <span class="cnt">${l.count}件</span>
+      <span class="grow"></span>
+      <input class="rename" type="text" maxlength="30" value="${esc(l.name)}" aria-label="名前を変える">
+      <select class="recolor" aria-label="色を変える">${LABEL_COLORS.map(c => `<option value="${c}" ${c === l.color ? "selected" : ""}>${COLOR_NAME[c]}</option>`).join("")}</select>
+      <button type="button" class="small del">削除</button>
+    </li>`).join("")
+    : `<li class="empty">まだラベルはありません。上で名前と色を選んで作ってください。</li>`;
+}
+
+$("labelForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const name = $("labelName").value.trim();
+  if (!name) { labelStatus("warn", "ラベルの名前を入れてください。"); $("labelName").focus(); return; }
+  try {
+    const { label } = await api("/api/labels", { name, color: newLabelColor });
+    labels.push(label);
+    $("labelName").value = "";
+    labelStatus("ok", `「${label.name}」を作りました。候補一覧の各投稿の「＋ ラベル」から付けられます。`);
+    renderLabelList(); renderLabelSelect();
+  } catch (e) { labelStatus("bad", e.message || "作れませんでした。"); }
+});
+
+$("labelList").addEventListener("click", async ev => {
+  const li = ev.target.closest("li[data-id]");
+  if (!li) return;
+  const id = Number(li.dataset.id);
+  const l = labelById(id);
+  if (ev.target.closest(".open-label")) {
+    listLabel = String(id); listStatus = ""; listPage = 1;
+    $("listLabel").value = listLabel;
+    document.querySelectorAll("#listFilter .chip-btn").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.status === "")));
+    document.querySelector('.tab[data-view="list"]').click();
+    return;
+  }
+  if (ev.target.closest(".del")) {
+    if (!confirm(`ラベル「${l.name}」を削除しますか？\n付けている${l.count}件の候補からも外れます（候補そのものは消えません）。`)) return;
+    try {
+      await api("/api/labels?id=" + id, null, "DELETE");
+      labels = labels.filter(x => x.id !== id);
+      labelStatus("ok", `「${l.name}」を削除しました。`);
+      renderLabelList(); renderLabelSelect();
+    } catch (e) { labelStatus("bad", e.message || "削除できませんでした。"); }
+  }
+});
+
+$("labelList").addEventListener("change", async ev => {
+  const li = ev.target.closest("li[data-id]");
+  if (!li) return;
+  const id = Number(li.dataset.id);
+  const l = labelById(id);
+  const patch = ev.target.classList.contains("rename") ? { name: ev.target.value.trim() } : ev.target.classList.contains("recolor") ? { color: ev.target.value } : null;
+  if (!patch) return;
+  try {
+    const { label } = await api("/api/labels", { id, ...patch }, "PATCH");
+    Object.assign(l, label);
+    labelStatus("ok", "保存しました。");
+    renderLabelList(); renderLabelSelect();
+  } catch (e) {
+    labelStatus("bad", e.message || "保存できませんでした。");
+    renderLabelList();
+  }
+});
