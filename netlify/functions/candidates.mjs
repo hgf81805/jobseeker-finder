@@ -1,3 +1,4 @@
+import { logAccess } from "../lib/access.mjs";
 import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { dbEnabled, rest } from "../lib/db.mjs";
 
@@ -5,10 +6,11 @@ const STATUSES = ["new", "contacted", "replied", "meeting", "won", "skip", "vend
 
 // GET：候補一覧（?status= で絞り込み）／PATCH：進み具合とメモの更新
 // POST：除外した投稿に印を付ける（候補一覧に無ければ投稿ごと登録、status "none" で登録を取り消す）
-export default async (req) => {
-  if (!isLoggedIn(req)) return unauthorized();
+export default async (req, context) => {
+  if (!isLoggedIn(req)) { await logAccess(req, context, "list", false); return unauthorized(); }
   if (!dbEnabled()) return json(503, { error: "no_db", message: "データベースが設定されていません。" });
   try {
+    await logAccess(req, context, req.method === "GET" ? "list" : "mark");
     if (req.method === "GET") {
       const status = new URL(req.url).searchParams.get("status");
       const filter = status === "not_vendor" ? "&status=not.in.(vendor,contacted,skip)" : STATUSES.includes(status) ? `&status=eq.${status}` : "";

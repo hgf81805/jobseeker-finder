@@ -25,3 +25,9 @@
   from = "/credits"
   to = "/credits.html"
   status = 200
+
+# アクセス記録のページ
+[[redirects]]
+  from = "/access"
+  to = "/access.html"
+  status = 200

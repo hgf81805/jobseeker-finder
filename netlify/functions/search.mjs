@@ -1,3 +1,4 @@
+import { logAccess } from "../lib/access.mjs";
 import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { throkGet, throkError } from "../lib/throk.mjs";
 import { overBudget, recordUsage } from "../lib/budget.mjs";
@@ -7,14 +8,15 @@ const clamp = (v, min, max, d) => {
   return Number.isNaN(n) ? d : Math.min(max, Math.max(min, n));
 };
 
-export default async (req) => {
+export default async (req, context) => {
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-  if (!isLoggedIn(req)) return unauthorized();
+  if (!isLoggedIn(req)) { await logAccess(req, context, "search", false); return unauthorized(); }
   const body = await readJson(req);
   const keywords = (Array.isArray(body.keywords) ? body.keywords : [])
     .map(k => String(k).trim()).filter(Boolean).slice(0, 30);
   if (!keywords.length) return json(400, { error: "bad_request", message: "キーワードを1つ以上入れてください。" });
   const size = clamp(body.size, 1, 30, 30);
+  if (clamp(body.page, 1, 3, 1) === 1) await logAccess(req, context, "search"); // 1回の検索につき1件
   // 期間の始まり。前回の検索日時（since）が期間内なら、そこから後だけを取る
   const days = clamp(body.days, 1, 7, 5);
   const windowStart = Math.floor(Date.now() / 1000) - days * 24 * 3600;

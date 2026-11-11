@@ -1,10 +1,12 @@
+import { logAccess } from "../lib/access.mjs";
 import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { dbEnabled, dailyLimit, setDailyLimit, creditsUsedToday, MAX_DAILY_LIMIT } from "../lib/db.mjs";
 
 // GET：今日（日本時間）使ったクレジットと1日の上限／POST：1日の上限を変える（/up の画面から）
-export default async (req) => {
+export default async (req, context) => {
   if (!isLoggedIn(req)) return unauthorized();
   if (req.method === "POST") {
+    await logAccess(req, context, "limit_change");
     if (!dbEnabled()) return json(503, { error: "no_db", message: "データベースが設定されていないため、上限を保存できません。" });
     const body = await readJson(req);
     const n = parseInt(body.limit, 10);

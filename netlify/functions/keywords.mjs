@@ -1,9 +1,11 @@
+import { logAccess } from "../lib/access.mjs";
 import { isLoggedIn, unauthorized, json } from "../lib/auth.mjs";
 import { dbEnabled, rest } from "../lib/db.mjs";
 
 // キーワードの成績表（Supabase の keyword_report() で集計）
-export default async (req) => {
-  if (!isLoggedIn(req)) return unauthorized();
+export default async (req, context) => {
+  if (!isLoggedIn(req)) { await logAccess(req, context, "keywords_view", false); return unauthorized(); }
+  await logAccess(req, context, "keywords_view");
   if (!dbEnabled()) return json(503, { error: "no_db", message: "データベースが設定されていません。" });
   try {
     const rows = await rest("rpc/keyword_report", { method: "POST", body: {} });

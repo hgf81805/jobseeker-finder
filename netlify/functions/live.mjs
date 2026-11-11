@@ -1,15 +1,17 @@
+import { logAccess } from "../lib/access.mjs";
 import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { throkGet, throkError } from "../lib/throk.mjs";
 import { overBudget, recordUsage } from "../lib/budget.mjs";
 import { dbEnabled, rest } from "../lib/db.mjs";
 
-export default async (req) => {
+export default async (req, context) => {
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-  if (!isLoggedIn(req)) return unauthorized();
+  if (!isLoggedIn(req)) { await logAccess(req, context, "live_check", false); return unauthorized(); }
   const body = await readJson(req);
   const codes = (Array.isArray(body.codes) ? body.codes : [])
     .map(c => String(c).trim()).filter(c => /^[A-Za-z0-9_-]{5,20}$/.test(c)).slice(0, 10);
   if (!codes.length) return json(400, { error: "bad_request", message: "投稿コードがありません。" });
+  await logAccess(req, context, "live_check");
   const blocked = await overBudget(codes.length * 3);
   if (blocked) return blocked;
   try {

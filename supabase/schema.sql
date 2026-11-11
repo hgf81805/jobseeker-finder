@@ -153,3 +153,38 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.credit_daily() from public, anon, authenticated;
 grant execute on function public.credit_daily() to service_role;
+
+-- アクセス記録（IPアドレスごとの操作）。90日より古いものは消す
+create table if not exists public.access_log (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  ip text,
+  action text not null,
+  ok boolean not null default true,
+  user_agent text
+);
+create index if not exists access_log_at_idx on public.access_log (at desc);
+alter table public.access_log enable row level security;
+
+create or replace function public.access_purge() returns void
+language sql security definer set search_path = public as $$
+  delete from access_log where at < now() - interval '90 days';
+$$;
+
+-- IPアドレスごとのまとめ（直近90日）
+create or replace function public.access_summary()
+returns table (ip text, total bigint, login_ok bigint, login_fail bigint, first_at timestamptz, last_at timestamptz, user_agent text)
+language sql stable security definer set search_path = public as $$
+  select ip, count(*),
+    count(*) filter (where action = 'login' and ok),
+    count(*) filter (where action = 'login' and not ok),
+    min(at), max(at),
+    (array_agg(user_agent order by at desc))[1]
+  from access_log
+  group by ip
+  order by max(at) desc;
+$$;
+revoke execute on function public.access_purge() from public, anon, authenticated;
+revoke execute on function public.access_summary() from public, anon, authenticated;
+grant execute on function public.access_purge() to service_role;
+grant execute on function public.access_summary() to service_role;

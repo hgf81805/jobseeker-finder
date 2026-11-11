@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>アクセス記録 | ポスト検索</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+.ac { max-width: 960px; margin: 0 auto; padding: 40px 16px 64px; display: grid; gap: 18px; }
+.ac h2 { font-family: var(--font-display); font-size: 17px; margin: 8px 0 0; }
+.ac table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ac th, .ac td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.ac th { color: var(--muted); font-weight: 500; background: var(--bg); }
+.ac tbody tr:last-child td { border-bottom: none; }
+.ac .n { text-align: right; font-variant-numeric: tabular-nums; }
+.ac .ip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.ac .ua { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+.ac tr.ng td { background: var(--bad-soft); }
+.ac .bad { color: var(--bad); font-weight: 700; }
+.ac .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+.ac .tools select, .ac .tools input { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+#body { display: grid; gap: 12px; }
+#body[hidden] { display: none; }
+.ac h2:not(:first-child) { margin-top: 18px; }
+</style>
+</head>
+<body>
+<main class="ac">
+  <header>
+    <h1>アクセス記録</h1>
+    <p class="lead">このサイトを操作したIPアドレスと、その時刻・操作の記録です（直近90日）。</p>
+  </header>
+  <div class="status warn" id="needLogin" hidden>ログインが必要です。<a href="/">ポスト検索</a>でログインしてから、このページを開き直してください。</div>
+  <div class="status bad" id="err" hidden></div>
+  <section id="body" hidden>
+    <h2>IPアドレスごとのまとめ</h2>
+    <div class="table-box"><table>
+      <thead><tr><th scope="col">IPアドレス</th><th scope="col" class="n">操作数</th><th scope="col" class="n">ログイン成功</th><th scope="col" class="n">ログイン失敗</th><th scope="col">最初</th><th scope="col">最後</th><th scope="col">ブラウザ</th></tr></thead>
+      <tbody id="sum"></tbody>
+    </table></div>
+
+    <h2>時系列の一覧（新しい順・最大500件）</h2>
+    <div class="tools">
+      <label>IPアドレス <select id="fIp"><option value="">すべて</option></select></label>
+      <label>操作 <select id="fAct"><option value="">すべて</option></select></label>
+      <label><input type="checkbox" id="fNg"> 失敗・拒否だけ</label>
+      <span id="cnt" class="note"></span>
+    </div>
+    <div class="table-box"><table>
+      <thead><tr><th scope="col">日時</th><th scope="col">IPアドレス</th><th scope="col">操作</th><th scope="col">結果</th><th scope="col">ブラウザ</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="note">記録は、この機能を入れた日から始まっています。90日より古い記録は自動で消えます。「拒否」は、ログインしていない状態で操作しようとして断られたものです。</p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ACTIONS = { login: "ログイン", logout: "ログアウト", open: "画面を開いた", search: "検索", live_check: "投稿の確認", profile: "プロフィール取得", list: "候補一覧を表示", mark: "印の変更", keywords_view: "キーワード成績", credits_view: "使用量ページ", access_view: "アクセス記録ページ", limit_change: "上限の変更" };
+const label = a => ACTIONS[a] || a;
+const fmt = t => new Date(t).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const result = r => r.ok ? "成功" : (r.action === "login" ? "失敗" : r.action === "open" ? "未ログイン" : "拒否");
+const browser = ua => {
+  ua = String(ua || "");
+  const os = /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "";
+  const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : /Firefox\//.test(ua) ? "Firefox" : "";
+  return [os, br].filter(Boolean).join("・") || ua.slice(0, 40) || "—";
+};
+let rows = [];
+function render() {
+  const ip = $("fIp").value, act = $("fAct").value, ng = $("fNg").checked;
+  const list = rows.filter(r => (!ip || r.ip === ip) && (!act || r.action === act) && (!ng || !r.ok));
+  $("cnt").textContent = `${list.length}件`;
+  $("rows").innerHTML = list.length ? list.map(r => `<tr class="${r.ok ? "" : "ng"}">
+    <td>${esc(fmt(r.at))}</td><td class="ip">${esc(r.ip || "不明")}</td><td>${esc(label(r.action))}</td>
+    <td class="${r.ok ? "" : "bad"}">${esc(result(r))}</td><td class="ua" title="${esc(r.user_agent)}">${esc(browser(r.user_agent))}</td></tr>`).join("")
+    : `<tr><td colspan="5">記録がありません。</td></tr>`;
+}
+(async () => {
+  const r = await fetch("/api/access", { credentials: "same-origin" });
+  if (r.status === 401) { $("needLogin").hidden = false; return; }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { $("err").textContent = d.message || "読み込めませんでした。"; $("err").hidden = false; return; }
+  rows = d.rows || [];
+  $("sum").innerHTML = (d.summary || []).length ? d.summary.map(s => `<tr>
+    <td class="ip">${esc(s.ip || "不明")}</td><td class="n">${Number(s.total).toLocaleString()}</td><td class="n">${s.login_ok}</td>
+    <td class="n ${Number(s.login_fail) ? "bad" : ""}">${s.login_fail}</td><td>${esc(fmt(s.first_at))}</td><td>${esc(fmt(s.last_at))}</td>
+    <td class="ua" title="${esc(s.user_agent)}">${esc(browser(s.user_agent))}</td></tr>`).join("") : `<tr><td colspan="7">記録がありません。</td></tr>`;
+  const ips = [...new Set(rows.map(r => r.ip).filter(Boolean))];
+  $("fIp").innerHTML += ips.map(i => `<option value="${esc(i)}">${esc(i)}</option>`).join("");
+  const acts = [...new Set(rows.map(r => r.action))];
+  $("fAct").innerHTML += acts.map(a => `<option value="${esc(a)}">${esc(label(a))}</option>`).join("");
+  ["fIp", "fAct", "fNg"].forEach(id => $(id).addEventListener("change", render));
+  render();
+  $("body").hidden = false;
+})();
+</script>
+</body>
+</html>
