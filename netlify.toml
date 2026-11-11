@@ -19,3 +19,9 @@
   from = "/up"
   to = "/up.html"
   status = 200
+
+# 日ごとのクレジット使用量のページ
+[[redirects]]
+  from = "/credits"
+  to = "/credits.html"
+  status = 200

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>クレジット使用量 | ポスト検索</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+.cr { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; display: grid; gap: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 2px; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-family: var(--font-display); font-size: 26px; font-variant-numeric: tabular-nums; }
+.tile .v small { font-size: 13px; color: var(--muted); font-family: var(--font-body); }
+.cr table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cr th, .cr td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.cr th { color: var(--muted); font-weight: 500; background: var(--bg); }
+.cr tbody tr:last-child td { border-bottom: none; }
+.cr .n { text-align: right; font-variant-numeric: tabular-nums; }
+.bar { width: 120px; height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; display: inline-block; vertical-align: middle; }
+.bar span { display: block; height: 100%; background: var(--accent); }
+.bar.over span { background: var(--bad); }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+@media (max-width: 560px) { .tiles { grid-template-columns: 1fr; } .bar { width: 60px; } }
+</style>
+</head>
+<body>
+<main class="cr">
+  <header>
+    <h1>クレジット使用量</h1>
+    <p class="lead">日ごと（日本時間）に使った検索のクレジットです。</p>
+  </header>
+  <div class="status warn" id="needLogin" hidden>ログインが必要です。<a href="/">ポスト検索</a>でログインしてから、このページを開き直してください。</div>
+  <div class="status bad" id="err" hidden></div>
+  <section id="body" hidden>
+    <div class="tiles">
+      <div class="tile"><span class="k">今日</span><span class="v" id="today">—</span></div>
+      <div class="tile"><span class="k">今月の合計</span><span class="v" id="month">—</span></div>
+      <div class="tile"><span class="k">1日の上限</span><span class="v" id="limit">—</span></div>
+    </div>
+    <div class="table-box" style="margin-top:18px">
+      <table>
+        <thead><tr><th scope="col">日付</th><th scope="col" class="n">検索</th><th scope="col" class="n">削除確認・プロフィール</th><th scope="col" class="n">合計</th><th scope="col">上限に対して</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:12px">記録はデータベースに接続した日（11月4日）からです。それより前の使用分と、このアプリの外で使った分は含みません。「上限に対して」は今の1日の上限との比較です。</p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const jstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+const fmtDay = d => { const [y, m, dd] = d.split("-").map(Number); const w = "日月火水木金土"[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]; return `${m}/${dd}（${w}）`; };
+(async () => {
+  const r = await fetch("/api/credits", { credentials: "same-origin" });
+  if (r.status === 401) { $("needLogin").hidden = false; return; }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { $("err").textContent = d.message || "読み込めませんでした。"; $("err").hidden = false; return; }
+  const today = jstToday(), month = today.slice(0, 7);
+  const days = d.days || [];
+  const t = days.find(x => x.day === today);
+  $("today").innerHTML = `${(t ? Number(t.total) : 0).toLocaleString()} <small>／ ${Number(d.limit).toLocaleString()}</small>`;
+  $("month").innerHTML = `${days.filter(x => String(x.day).startsWith(month)).reduce((s, x) => s + Number(x.total), 0).toLocaleString()} <small>／ 15,000</small>`;
+  $("limit").textContent = Number(d.limit).toLocaleString();
+  $("rows").innerHTML = days.length ? days.map(x => {
+    const pct = d.limit ? Math.min(100, Number(x.total) / d.limit * 100) : 0;
+    return `<tr><td>${esc(fmtDay(String(x.day)))}</td><td class="n">${Number(x.search).toLocaleString()}</td><td class="n">${Number(x.live).toLocaleString()}</td>
+      <td class="n"><b>${Number(x.total).toLocaleString()}</b></td>
+      <td><span class="bar${Number(x.total) > d.limit ? " over" : ""}"><span style="width:${pct}%"></span></span> ${Math.round(Number(x.total) / (d.limit || 1) * 100)}%</td></tr>`;
+  }).join("") : `<tr><td colspan="5">まだ記録がありません。</td></tr>`;
+  $("body").hidden = false;
+})();
+</script>
+</body>
+</html>

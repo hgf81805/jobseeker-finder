@@ -137,3 +137,19 @@ alter table public.authors add column if not exists profile_checked_at timestamp
 -- 取得したときのコメント数・いいね数
 alter table public.candidates add column if not exists reply_count int;
 alter table public.candidates add column if not exists like_count int;
+
+-- 日ごと（日本時間）のクレジット使用量：検索／削除確認・プロフィール
+create or replace function public.credit_daily()
+returns table (day date, search bigint, live bigint, total bigint, calls bigint)
+language sql stable security definer set search_path = public as $$
+  select (at at time zone 'Asia/Tokyo')::date as day,
+    coalesce(sum(credits) filter (where kind = 'search'), 0),
+    coalesce(sum(credits) filter (where kind = 'live'), 0),
+    coalesce(sum(credits), 0),
+    count(*)
+  from usage_log
+  group by 1
+  order by 1 desc;
+$$;
+revoke execute on function public.credit_daily() from public, anon, authenticated;
+grant execute on function public.credit_daily() to service_role;
