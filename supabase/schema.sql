@@ -205,3 +205,11 @@ create table if not exists public.candidate_labels (
 create index if not exists candidate_labels_label_idx on public.candidate_labels (label_id);
 alter table public.labels enable row level security;
 alter table public.candidate_labels enable row level security;
+
+-- IPアドレスごとの利用者名（/access の画面で登録する）
+create table if not exists public.ip_names (
+  ip text primary key,
+  name text not null check (char_length(name) between 1 and 40),
+  updated_at timestamptz not null default now()
+);
+alter table public.ip_names enable row level security;
