@@ -11,7 +11,7 @@ export async function overBudget(maxCost) {
   return json(429, { error: "daily_limit", message: `今日の上限（${limit}クレジット）に達しました。明日また検索できます。` });
 }
 
-export async function recordUsage(kind, data) {
+export async function recordUsage(kind, data, owner) {
   if (!dbEnabled()) return;
-  try { await logUsage(kind, (data && data.metadata && data.metadata.credits_consumed) || 0); } catch (e) {}
+  try { await logUsage(kind, (data && data.metadata && data.metadata.credits_consumed) || 0, owner); } catch (e) {}
 }

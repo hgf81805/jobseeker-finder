@@ -1,5 +1,5 @@
 import { logAccess } from "../lib/access.mjs";
-import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
+import { currentUser, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { throkGet, throkError } from "../lib/throk.mjs";
 import { overBudget, recordUsage } from "../lib/budget.mjs";
 
@@ -10,7 +10,8 @@ const clamp = (v, min, max, d) => {
 
 export default async (req, context) => {
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-  if (!isLoggedIn(req)) { await logAccess(req, context, "search", false); return unauthorized(); }
+  const owner = currentUser(req);
+  if (!owner) { await logAccess(req, context, "search", false); return unauthorized(); }
   const body = await readJson(req);
   const keywords = (Array.isArray(body.keywords) ? body.keywords : [])
     .map(k => String(k).trim()).filter(Boolean).slice(0, 30);
@@ -36,7 +37,7 @@ export default async (req, context) => {
       page: clamp(body.page, 1, 3, 1),
       include_details: details,
     });
-    await recordUsage("search", data);
+    await recordUsage("search", data, owner);
     return json(200, data);
   } catch (e) {
     return throkError(e);

@@ -40,6 +40,7 @@ async function checkSession() {
   try {
     const me = await api("/api/me");
     showApp(me.loggedIn);
+    $("acctName").textContent = me.account ? `ログイン中：${me.account}` : "";
     $("keyWarn").hidden = me.hasKey;
     hasDb = !!me.hasDb;
   } catch (e) { showApp(false); }
@@ -58,7 +59,8 @@ $("loginForm").addEventListener("submit", async ev => {
     $("loginPass").value = "";
   } finally { $("loginBtn").disabled = false; }
 });
-$("logout").addEventListener("click", async () => { try { await api("/api/logout", {}); } catch (e) {} showApp(false); });
+// ログアウトしたら画面を読み直し、前のアカウントの検索結果や一覧を残さない
+$("logout").addEventListener("click", async () => { try { await api("/api/logout", {}); } catch (e) {} location.reload(); });
 checkSession().then(() => { if (!$("app").hidden) refreshUsage(); });
 
 // 今日（日本時間）使ったクレジット ／ 1日の上限

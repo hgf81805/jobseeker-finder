@@ -1,5 +1,5 @@
 import { logAccess } from "../lib/access.mjs";
-import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
+import { currentUser, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { dbEnabled, rest } from "../lib/db.mjs";
 
 const COLORS = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"];
@@ -11,13 +11,15 @@ const validCode = v => /^[A-Za-z0-9_-]{5,20}$/.test(String(v || ""));
 // POST {name, color}：作る ／ PATCH {id, name?, color?}：名前・色を変える ／ DELETE ?id=：消す（付けた印も外れる）
 // POST {action:"assign", code, label_id, on}：候補にラベルを付ける・外す
 export default async (req, context) => {
-  if (!isLoggedIn(req)) { await logAccess(req, context, "labels", false); return unauthorized(); }
+  const owner = currentUser(req);
+  if (!owner) { await logAccess(req, context, "labels", false); return unauthorized(); }
+  const mine = `owner=eq.${owner}`; // ログイン中のアカウントのラベルだけを読み書きする
   if (!dbEnabled()) return json(503, { error: "no_db", message: "データベースが設定されていません。" });
   try {
     if (req.method === "GET") {
       const [labels, links] = await Promise.all([
-        rest("labels?select=id,name,color,created_at&order=created_at.asc"),
-        rest("candidate_labels?select=label_id&limit=100000"),
+        rest(`labels?select=id,name,color,created_at&${mine}&order=created_at.asc`),
+        rest(`candidate_labels?select=label_id&${mine}&limit=100000`),
       ]);
       const counts = {};
       for (const l of links || []) counts[l.label_id] = (counts[l.label_id] || 0) + 1;
@@ -30,18 +32,19 @@ export default async (req, context) => {
         const id = validId(body.label_id);
         if (!id || !validCode(body.code)) return json(400, { error: "bad_request", message: "ラベルか投稿の指定が正しくありません。" });
         if (body.on) {
-          await rest("candidate_labels?on_conflict=code,label_id", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: [{ code: body.code, label_id: id }] });
+          await rest("candidate_labels?on_conflict=owner,code,label_id", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: [{ owner, code: body.code, label_id: id }] });
         } else {
-          await rest(`candidate_labels?code=eq.${body.code}&label_id=eq.${id}`, { method: "DELETE", prefer: "return=minimal" });
+          await rest(`candidate_labels?${mine}&code=eq.${body.code}&label_id=eq.${id}`, { method: "DELETE", prefer: "return=minimal" });
         }
         return json(200, { ok: true });
       }
       const name = cleanName(body.name);
       if (!name) return json(400, { error: "bad_request", message: "ラベルの名前を入れてください。" });
       const color = COLORS.includes(body.color) ? body.color : "gray";
-      const dup = await rest(`labels?select=id&name=eq.${encodeURIComponent(name)}`);
+      const dup = await rest(`labels?select=id&${mine}&name=eq.${encodeURIComponent(name)}`);
       if (dup && dup.length) return json(409, { error: "duplicate", message: "同じ名前のラベルがあります。" });
-      const [row] = await rest("labels", { method: "POST", prefer: "return=representation", body: [{ name, color }] });
+      const [row] = await rest("labels", { method: "POST", prefer: "return=representation", body: [{ owner, name, color }] });
+      delete row.owner;
       return json(200, { label: { ...row, count: 0 } });
     }
     if (req.method === "PATCH") {
@@ -52,20 +55,21 @@ export default async (req, context) => {
       if (body.name !== undefined) {
         patch.name = cleanName(body.name);
         if (!patch.name) return json(400, { error: "bad_request", message: "ラベルの名前を入れてください。" });
-        const dup = await rest(`labels?select=id&name=eq.${encodeURIComponent(patch.name)}&id=neq.${id}`);
+        const dup = await rest(`labels?select=id&${mine}&name=eq.${encodeURIComponent(patch.name)}&id=neq.${id}`);
         if (dup && dup.length) return json(409, { error: "duplicate", message: "同じ名前のラベルがあります。" });
       }
       if (body.color !== undefined) {
         if (!COLORS.includes(body.color)) return json(400, { error: "bad_request", message: "色の指定が正しくありません。" });
         patch.color = body.color;
       }
-      const [row] = await rest(`labels?id=eq.${id}`, { method: "PATCH", prefer: "return=representation", body: patch });
+      const [row] = await rest(`labels?${mine}&id=eq.${id}`, { method: "PATCH", prefer: "return=representation", body: patch });
+      if (row) delete row.owner;
       return json(200, { label: row || null });
     }
     if (req.method === "DELETE") {
       const id = validId(new URL(req.url).searchParams.get("id"));
       if (!id) return json(400, { error: "bad_request", message: "ラベルの指定が正しくありません。" });
-      await rest(`labels?id=eq.${id}`, { method: "DELETE", prefer: "return=minimal" });
+      await rest(`labels?${mine}&id=eq.${id}`, { method: "DELETE", prefer: "return=minimal" });
       return json(200, { ok: true });
     }
     return json(405, { error: "method_not_allowed" });

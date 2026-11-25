@@ -16,6 +16,7 @@ Threads の日本語投稿から、転職を考えている本人のつぶやき
 | `THROK_API_KEY` | throk の APIキー（developer.throk.ai で発行） |
 | `LOGIN_HASH` | 許可するメールアドレスとパスワードの組のハッシュ |
 | `LOGIN_SALT` | ハッシュのソルト（`jf-login-v1`） |
+| `LOGIN2_PASSWORD` | サブアカウント（hgf51805@gmail.com）のパスワード（8文字以上）。未設定ならサブアカウントではログインできない |
 | `SESSION_SECRET` | ログイン Cookie の署名用のランダムな文字列 |
 | `SUPABASE_URL` | Supabase の Project URL（任意。無ければ候補一覧と1日の上限は無効） |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase の service_role キー（サーバー専用。画面側には出さない） |
@@ -34,3 +35,11 @@ Threads の日本語投稿から、転職を考えている本人のつぶやき
 
 同じキーワードを前に検索していれば、その1日前より後の投稿だけを取る（画面のチェックで切り替え）。
 - `post_insights`：AI（Claude）が投稿から読み取った内容。同じ投稿は二度分析しない
+
+## アカウントとデータの分け方
+
+- ログインできるのは メイン（LOGIN_HASH の組）と サブ（hgf51805@gmail.com ＋ LOGIN2_PASSWORD）の2つ。
+- 候補・検索履歴・投稿者（業者の印・プロフィール）・外した投稿・AIの読み取り・ラベルは、各テーブルの `owner` 列（`main` / `hgf`）でアカウントごとに分かれる。APIはログイン中のアカウントの行だけを読み書きする。
+- 1日のクレジット上限は2つの合計で数える（同じ throk 契約のため）。`usage_log.owner` で内訳が分かる。
+- `/up`・`/credits`・`/access` はメインアカウントだけが開ける。
+- 移行は `supabase/migrate-accounts.sql`（それまでのデータはすべて `main`）。

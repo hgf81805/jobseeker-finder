@@ -1,10 +1,11 @@
 import { logAccess } from "../lib/access.mjs";
-import { isLoggedIn, unauthorized, json } from "../lib/auth.mjs";
+import { isLoggedIn, isAdmin, unauthorized, forbidden, json } from "../lib/auth.mjs";
 import { dbEnabled, rest, dailyLimit } from "../lib/db.mjs";
 
 // 日ごと（日本時間）のクレジット使用量（Supabase の credit_daily() で集計）
 export default async (req, context) => {
   if (!isLoggedIn(req)) { await logAccess(req, context, "credits_view", false); return unauthorized(); }
+  if (!isAdmin(req)) { await logAccess(req, context, "credits_view", false); return forbidden(); }
   await logAccess(req, context, "credits_view");
   if (!dbEnabled()) return json(503, { error: "no_db", message: "データベースが設定されていません。" });
   try {

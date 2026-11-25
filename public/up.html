@@ -66,6 +66,8 @@ function show(u) {
 async function load() {
   const r = await fetch("/api/usage", { credentials: "same-origin" });
   if (r.status === 401) { $("needLogin").hidden = false; return; }
+  const me = await fetch("/api/me", { credentials: "same-origin" }).then(x => x.json()).catch(() => ({}));
+  if (!me.admin) { $("needLogin").textContent = "このページはメインアカウントだけが開けます。"; $("needLogin").hidden = false; return; }
   $("upForm").hidden = false;
   show(await r.json());
 }

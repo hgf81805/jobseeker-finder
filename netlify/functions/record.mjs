@@ -1,4 +1,4 @@
-import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
+import { currentUser, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { dbEnabled, rest } from "../lib/db.mjs";
 
 const int = v => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
@@ -6,7 +6,8 @@ const int = v => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
 // 検索1回分の履歴と、表示した投稿（候補）と、存在確認で外れた投稿（業者・削除済み）を保存する
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-  if (!isLoggedIn(req)) return unauthorized();
+  const owner = currentUser(req);
+  if (!owner) return unauthorized();
   if (!dbEnabled()) return json(200, { saved: false });
   const { search = {}, items = [], skipped = [] } = await readJson(req);
   try {
@@ -14,6 +15,7 @@ export default async (req) => {
       method: "POST",
       prefer: "return=representation",
       body: {
+        owner,
         // 同じキーワードの前回の検索を探せるように、並べ替えて保存する
         keywords: (Array.isArray(search.keywords) ? search.keywords : []).map(String).slice(0, 30).sort(),
         days: int(search.days), max_replies: int(search.maxReplies),
@@ -22,14 +24,14 @@ export default async (req) => {
     });
     const posts = (Array.isArray(items) ? items : []).slice(0, 10)
       .filter(i => i && /^[A-Za-z0-9_-]{5,20}$/.test(String(i.code)) && /^https:\/\/(www\.)?threads\.(com|net)\//.test(String(i.url)));
-    const authors = [...new Map(posts.filter(p => p.username).map(p => [p.username, { username: String(p.username), full_name: p.full_name ? String(p.full_name) : null }])).values()];
-    if (authors.length) await rest("authors?on_conflict=username", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: authors });
+    const authors = [...new Map(posts.filter(p => p.username).map(p => [p.username, { owner, username: String(p.username), full_name: p.full_name ? String(p.full_name) : null }])).values()];
+    if (authors.length) await rest("authors?on_conflict=owner,username", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: authors });
     if (posts.length) {
-      await rest("candidates?on_conflict=code", {
+      await rest("candidates?on_conflict=owner,code", {
         method: "POST",
         prefer: "resolution=ignore-duplicates,return=minimal",
         body: posts.map(p => ({
-          code: String(p.code), url: String(p.url), caption: p.caption ? String(p.caption).slice(0, 2000) : null,
+          owner, code: String(p.code), url: String(p.url), caption: p.caption ? String(p.caption).slice(0, 2000) : null,
           posted_at: p.posted_at ? new Date(int(p.posted_at) * 1000).toISOString() : null,
           username: p.username ? String(p.username) : null, search_id: row.id,
           reply_count: p.reply_count != null && Number.isFinite(Number(p.reply_count)) ? Math.max(0, Math.round(Number(p.reply_count))) : null, like_count: p.like_count != null && Number.isFinite(Number(p.like_count)) ? Math.max(0, Math.round(Number(p.like_count))) : null,
@@ -38,8 +40,8 @@ export default async (req) => {
     }
     const skips = (Array.isArray(skipped) ? skipped : []).slice(0, 30)
       .filter(s => s && /^[A-Za-z0-9_-]{5,20}$/.test(String(s.code)) && ["vendor", "deleted"].includes(s.reason))
-      .map(s => ({ code: String(s.code), reason: s.reason, username: s.username ? String(s.username).slice(0, 40) : null }));
-    if (skips.length) await rest("skipped_posts?on_conflict=code", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: skips });
+      .map(s => ({ owner, code: String(s.code), reason: s.reason, username: s.username ? String(s.username).slice(0, 40) : null }));
+    if (skips.length) await rest("skipped_posts?on_conflict=owner,code", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: skips });
     return json(200, { saved: true });
   } catch (e) {
     return json(200, { saved: false });

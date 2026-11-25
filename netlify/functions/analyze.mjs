@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
+import { currentUser, unauthorized, json, readJson } from "../lib/auth.mjs";
 import { dbEnabled, rest, inList } from "../lib/db.mjs";
 import { aiEnabled, analyzePosts } from "../lib/insights.mjs";
 
@@ -7,7 +7,8 @@ import { aiEnabled, analyzePosts } from "../lib/insights.mjs";
 // 保存済みの読み取り結果を返し、無い投稿だけ AI で読み取って保存する（同じ投稿は二度分析しない）
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-  if (!isLoggedIn(req)) return unauthorized();
+  const owner = currentUser(req);
+  if (!owner) return unauthorized();
   const body = await readJson(req);
   const posts = (Array.isArray(body.posts) ? body.posts : [])
     .filter(p => p && /^[A-Za-z0-9_-]{5,20}$/.test(String(p.code)))
@@ -17,7 +18,7 @@ export default async (req) => {
   const insights = {};
   if (dbEnabled()) {
     try {
-      const rows = await rest(`post_insights?select=code,is_seeker,stage,job,area,worries,summary,distress,work_style,age_group,openness&code=in.${encodeURIComponent(inList(posts.map(p => p.code)))}`);
+      const rows = await rest(`post_insights?select=code,is_seeker,stage,job,area,worries,summary,distress,work_style,age_group,openness&owner=eq.${owner}&code=in.${encodeURIComponent(inList(posts.map(p => p.code)))}`);
       for (const r of rows || []) insights[r.code] = r;
     } catch (e) {}
   }
@@ -33,7 +34,7 @@ export default async (req) => {
       for (const r of results) insights[r.code] = r;
       if (results.length && dbEnabled()) {
         try {
-          await rest("post_insights?on_conflict=code", { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: results });
+          await rest("post_insights?on_conflict=owner,code", { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: results.map(r => ({ ...r, owner })) });
         } catch (e) {}
       }
     }

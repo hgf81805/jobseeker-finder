@@ -1,4 +1,4 @@
-import { isLoggedIn, unauthorized, json, readJson } from "../lib/auth.mjs";
+import { isLoggedIn, isAdmin, unauthorized, forbidden, json, readJson } from "../lib/auth.mjs";
 import { dbEnabled, rest } from "../lib/db.mjs";
 import { logAccess } from "../lib/access.mjs";
 
@@ -6,6 +6,7 @@ import { logAccess } from "../lib/access.mjs";
 // POST {ip, name}：IPアドレスに利用者名を登録する（name を空にすると登録を消す）
 export default async (req, context) => {
   if (!isLoggedIn(req)) { await logAccess(req, context, "access_view", false); return unauthorized(); }
+  if (!isAdmin(req)) { await logAccess(req, context, "access_view", false); return forbidden(); }
   if (!dbEnabled()) return json(503, { error: "no_db", message: "データベースが設定されていません。" });
   if (req.method === "POST") {
     const body = await readJson(req);
@@ -27,7 +28,7 @@ export default async (req, context) => {
   await logAccess(req, context, "access_view");
   try {
     const [rows, summary, names] = await Promise.all([
-      rest("access_log?select=at,ip,action,ok,user_agent&order=at.desc&limit=500"),
+      rest("access_log?select=at,ip,action,ok,owner,user_agent&order=at.desc&limit=500"),
       rest("rpc/access_summary", { method: "POST", body: {} }),
       rest("ip_names?select=ip,name"),
     ]);

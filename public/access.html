@@ -60,7 +60,7 @@
       <span id="cnt" class="note"></span>
     </div>
     <div class="table-box"><table>
-      <thead><tr><th scope="col">日時</th><th scope="col">IPアドレス</th><th scope="col">利用者</th><th scope="col">操作</th><th scope="col">結果</th><th scope="col">ブラウザ</th></tr></thead>
+      <thead><tr><th scope="col">日時</th><th scope="col">IPアドレス</th><th scope="col">利用者</th><th scope="col">アカウント</th><th scope="col">操作</th><th scope="col">結果</th><th scope="col">ブラウザ</th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
     <p class="note">記録は、この機能を入れた日から始まっています。90日より古い記録は自動で消えます。「拒否」は、ログインしていない状態で操作しようとして断られたものです。</p>
@@ -71,6 +71,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ACTIONS = { login: "ログイン", logout: "ログアウト", open: "画面を開いた", search: "検索", live_check: "投稿の確認", profile: "プロフィール取得", list: "候補一覧を表示", mark: "印の変更", keywords_view: "キーワード成績", credits_view: "使用量ページ", access_view: "アクセス記録ページ", limit_change: "上限の変更", ip_name: "利用者名の登録", labels: "ラベルの変更" };
 const label = a => ACTIONS[a] || a;
+const ACCT = { main: "メイン", hgf: "サブ" };
 const fmt = t => new Date(t).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const result = r => r.ok ? "成功" : (r.action === "login" ? "失敗" : r.action === "open" ? "未ログイン" : "拒否");
 const browser = ua => {
@@ -86,9 +87,9 @@ function render() {
   const list = rows.filter(r => (!ip || r.ip === ip) && (!act || r.action === act) && (!ng || !r.ok));
   $("cnt").textContent = `${list.length}件`;
   $("rows").innerHTML = list.length ? list.map(r => `<tr class="${r.ok ? "" : "ng"}">
-    <td>${esc(fmt(r.at))}</td><td class="ip">${esc(r.ip || "不明")}</td><td>${r.ip ? who(r.ip) : ""}</td><td>${esc(label(r.action))}</td>
+    <td>${esc(fmt(r.at))}</td><td class="ip">${esc(r.ip || "不明")}</td><td>${r.ip ? who(r.ip) : ""}</td><td>${esc(ACCT[r.owner] || "—")}</td><td>${esc(label(r.action))}</td>
     <td class="${r.ok ? "" : "bad"}">${esc(result(r))}</td><td class="ua" title="${esc(r.user_agent)}">${esc(browser(r.user_agent))}</td></tr>`).join("")
-    : `<tr><td colspan="6">記録がありません。</td></tr>`;
+    : `<tr><td colspan="7">記録がありません。</td></tr>`;
 }
 function renderSummary() {
   $("sum").innerHTML = summary.length ? summary.map(s => `<tr>

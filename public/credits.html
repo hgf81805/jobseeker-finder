@@ -46,7 +46,7 @@
     </div>
     <div class="table-box" style="margin-top:18px">
       <table>
-        <thead><tr><th scope="col">日付</th><th scope="col" class="n">検索</th><th scope="col" class="n">削除確認・プロフィール</th><th scope="col" class="n">合計</th><th scope="col">上限に対して</th></tr></thead>
+        <thead><tr><th scope="col">日付</th><th scope="col" class="n">検索</th><th scope="col" class="n">削除確認・プロフィール</th><th scope="col" class="n">合計</th><th scope="col" class="n">メイン</th><th scope="col" class="n">サブ</th><th scope="col">上限に対して</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -73,8 +73,9 @@ const fmtDay = d => { const [y, m, dd] = d.split("-").map(Number); const w = "�
     const pct = d.limit ? Math.min(100, Number(x.total) / d.limit * 100) : 0;
     return `<tr><td>${esc(fmtDay(String(x.day)))}</td><td class="n">${Number(x.search).toLocaleString()}</td><td class="n">${Number(x.live).toLocaleString()}</td>
       <td class="n"><b>${Number(x.total).toLocaleString()}</b></td>
+      <td class="n">${Number((x.by_owner || {}).main || 0).toLocaleString()}</td><td class="n">${Number((x.by_owner || {}).hgf || 0).toLocaleString()}</td>
       <td><span class="bar${Number(x.total) > d.limit ? " over" : ""}"><span style="width:${pct}%"></span></span> ${Math.round(Number(x.total) / (d.limit || 1) * 100)}%</td></tr>`;
-  }).join("") : `<tr><td colspan="5">まだ記録がありません。</td></tr>`;
+  }).join("") : `<tr><td colspan="7">まだ記録がありません。</td></tr>`;
   $("body").hidden = false;
 })();
 </script>

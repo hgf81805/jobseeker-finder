@@ -70,7 +70,8 @@ export async function creditsUsedToday() {
   return (rows || []).reduce((sum, r) => sum + (r.credits || 0), 0);
 }
 
-export async function logUsage(kind, credits) {
+// 1日の上限は全アカウントの合計で数える（同じ契約のクレジットを使うため）。記録にはアカウントも残す
+export async function logUsage(kind, credits, owner) {
   if (!credits) return;
-  await rest("usage_log", { method: "POST", body: { kind, credits }, prefer: "return=minimal" });
+  await rest("usage_log", { method: "POST", body: { kind, credits, owner: owner || "main" }, prefer: "return=minimal" });
 }
